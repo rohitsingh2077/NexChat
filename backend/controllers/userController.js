@@ -5,12 +5,10 @@ const mongoose = require("mongoose");
 
 const userRegister = async (req, res, next) => {
   try {
-    console.log(`it is called`);
-    console.log("req.body:", req.body);
     const { fullname, username, email, gender, password, profilePicture } =
       req.body || {};
 
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ username }); 
     if (user) {
       return res.status(500).send({
         success: "false",
@@ -34,7 +32,6 @@ const userRegister = async (req, res, next) => {
       gender,
       profilePicture: profilePic,
     });
-
     if (newUser) {
       await newUser.save();
       jwtToken(newUser._id, res);
@@ -47,6 +44,7 @@ const userRegister = async (req, res, next) => {
       profilePic: profilePic,
       email: newUser.email,
       message: "new user is registered",
+      about :newUser.about ,
     });
   } catch (error) {
     res.status(500).send({
@@ -84,7 +82,10 @@ const userLogin = async (req, res, next) => {
       fullname: user.fullname,
       profilePic: user.profilePicture || null,
       email: user.email,
+      gender: user.gender,
+      username: user.username,
       message: "Successfully logged in",
+      about:user.about,
     });
   } catch (error) {
     console.log(`error while logging in: ${error}`);

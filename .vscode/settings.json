@@ -1,0 +1,14 @@
+{
+  // Point the Tailwind extension at the config file inside the frontend folder
+  "tailwindCSS.experimental.configFile": "frontend/tailwind.config.js",
+
+  // Help the extension provide class completions inside JSX/TSX files
+  "tailwindCSS.includeLanguages": {
+    "javascript": "javascript",
+    "javascriptreact": "html",
+    "typescriptreact": "html"
+  },
+
+  // Enable Emmet-style completions for Tailwind classes
+  "tailwindCSS.emmetCompletions": true
+}

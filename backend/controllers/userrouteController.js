@@ -14,7 +14,6 @@ const getUserBySearch = async (req, res) => {
         { fullname: { $regex: search, $options: "i" } },
       ],
     }).select("-password"); // never return password
-    console.log(users);
     return res.status(200).json({
       success: true,
       users,
@@ -28,31 +27,49 @@ const getUserBySearch = async (req, res) => {
   }
 };
 
-const getcurrentChatters = async(req,res)=>{
+const getcurrentChatters = async (req, res) => {
   try {
-    const currentUser = req.user._id;
-    const currentChatters= await Conversation.find({
-          participants:currentUser
-    }).sort({
-      updatedAt:-1
-    }).populate('participants','-password');
-    if(currentChatters.length ===0){
-      return res.status(200).send({
-        message:"We are lonely",
-      })
-    }
-    console.log(currentChatters);
-    return res.status(200).send({
-      success:true,
-      conversations:currentChatters
+    const currentUserId = req.user._id.toString();
+
+    const conversations = await Conversation.find({
+      participants: currentUserId,
     })
+      .sort({ updatedAt: -1 })
+      .populate("participants", "-password");
+
+    if (!conversations.length) {
+      return res.status(200).json({
+        success: true,
+        message: "We are lonely",
+        chatters: [],
+      });
+    }
+
+    const seen = new Set();
+    const uniqueChatters = [];
+
+    conversations.forEach((conversation) => {
+      conversation.participants.forEach((p) => {
+        const id = p._id.toString();
+        if (id !== currentUserId && !seen.has(id)) {
+          seen.add(id);
+          uniqueChatters.push(p);
+        }
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      chatters: uniqueChatters,
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({
       success: false,
-      message: "Error searching users",
+      message: "Error fetching chatters",
     });
   }
-}
+};
+
 
 module.exports = { getUserBySearch,getcurrentChatters };
