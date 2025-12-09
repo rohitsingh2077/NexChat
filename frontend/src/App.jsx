@@ -5,7 +5,7 @@ import { Route, Routes } from "react-router-dom";
 // external modules
 import { Signup } from "./login/Signup.jsx";
 import { Login } from "./login/Login.jsx";
-import { Home } from "./home/home.jsx";
+import { Home } from "./home/Home.jsx";
 import { VerifyUser } from "./utils/VerifyUser.jsx";
 import { ChatProvider } from "./Context/SelectedUser.jsx";
 import { Logout } from "./login/logout.jsx";
