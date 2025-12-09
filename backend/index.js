@@ -29,9 +29,9 @@ app.use('/api/update',updateRouter);
 
 app.use(express.static(path.join(root,'/frontend/dist')));
 
-app.get('/:path(*)',(req,res)=>{
-  res.sendFile(path.join(root,"frontend","dist","index.html"));
-})
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'frontend', 'dist', 'index.html'));
+});
 
 PORT = process.env.PORT || 3001;
 
