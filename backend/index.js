@@ -5,8 +5,8 @@ dotenv.config(); // can access the dotenv from anywhere
 const cookieParser = require("cookie-parser");
 
 const {app,server} = require('./Socket/socket.js');
-const path =require("path");
-const __dirname = path.resolve();
+const path = require("path");
+const root = path.resolve();
 
 //external modules
 const authRouter = require('./routes/authRouter');
@@ -27,10 +27,10 @@ app.use('/api/user',userRouter);
 app.use('/api/update',updateRouter);
 // app.use('/api/friends',friendRouter);
 
-app.use(express.static(path.join(__dirname,'/frontend/dist')));
+app.use(express.static(path.join(root,'/frontend/dist')));
 
 app.get('*',(req,res)=>{
-  res.sendFile(path.join(__dirname,"frontend","dist","index.html"));
+  res.sendFile(path.join(root,"frontend","dist","index.html"));
 })
 
 PORT = process.env.PORT || 3001;
