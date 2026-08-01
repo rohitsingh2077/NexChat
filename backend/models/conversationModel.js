@@ -24,6 +24,10 @@ const conversationSchema = mongoose.Schema(
   { timestamps: true }
 );
 
+// Supports the {participants: {$all: [senderId, receiverId]}} lookup that
+// runs on every message send/fetch - previously a full collection scan.
+conversationSchema.index({ participants: 1 });
+
 const Conversation = mongoose.model("Conversation", conversationSchema);
 
 module.exports = Conversation;

@@ -1,7 +1,17 @@
 const Conversation = require("../models/conversationModel");
 const User = require("../models/user");
+const friendService = require("../services/friendService");
 
-const getUserBySearch = async (req, res) => {
+const shapeUser = (user, friendshipStatus) => ({
+  _id: user._id,
+  username: user.username,
+  displayName: user.fullname,
+  avatar: user.profilePicture,
+  messagePrivacy: user.messagePrivacy,
+  friendshipStatus,
+});
+
+const getUserBySearch = async (req, res, next) => {
   try {
     const search = req.query.search || "";
     const currentUser = req.user._id;
@@ -13,21 +23,25 @@ const getUserBySearch = async (req, res) => {
         { username: { $regex: search, $options: "i" } },
         { fullname: { $regex: search, $options: "i" } },
       ],
-    }).select("-password"); // never return password
+    })
+      .select("_id username fullname profilePicture messagePrivacy") // only public fields
+      .limit(20);
+
+    const statusMap = await friendService.getFriendshipStatuses(
+      currentUser,
+      users.map((u) => u._id)
+    );
+
     return res.status(200).json({
       success: true,
-      users,
+      users: users.map((u) => shapeUser(u, statusMap.get(String(u._id)) || "NONE")),
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "Error searching users",
-    });
+    next(error);
   }
 };
 
-const getcurrentChatters = async (req, res) => {
+const getcurrentChatters = async (req, res, next) => {
   try {
     const currentUserId = req.user._id.toString();
 
@@ -35,7 +49,7 @@ const getcurrentChatters = async (req, res) => {
       participants: currentUserId,
     })
       .sort({ updatedAt: -1 })
-      .populate("participants", "-password");
+      .populate("participants", "_id username fullname profilePicture messagePrivacy");
 
     if (!conversations.length) {
       return res.status(200).json({
@@ -58,16 +72,17 @@ const getcurrentChatters = async (req, res) => {
       });
     });
 
+    const statusMap = await friendService.getFriendshipStatuses(
+      currentUserId,
+      uniqueChatters.map((u) => u._id)
+    );
+
     return res.status(200).json({
       success: true,
-      chatters: uniqueChatters,
+      chatters: uniqueChatters.map((u) => shapeUser(u, statusMap.get(String(u._id)) || "NONE")),
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "Error fetching chatters",
-    });
+    next(error);
   }
 };
 

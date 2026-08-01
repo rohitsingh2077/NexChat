@@ -1,12 +1,14 @@
 const User = require("../models/user");
-const bcrypt = require('bcrypt')
+const bcrypt = require("bcrypt");
 
-const updateUserController = async (req, res) => {
+// Always updates the authenticated user's own profile - the target user is
+// derived from req.user (set by isLogin), never from a client-supplied id,
+// so one account can never edit another account's data.
+const updateUserController = async (req, res, next) => {
   try {
-    const { fullname, gender, profilePicture,password , about:updatedAbout } = req.body;
-    const { id : userId } = req.params; // /user/update/:userId
-    
-    // Make sure user exists
+    const { fullname, gender, profilePicture, password, about: updatedAbout, messagePrivacy } = req.body;
+    const userId = req.user._id;
+
     let user = await User.findById(userId);
 
     if (!user) {
@@ -19,11 +21,12 @@ const updateUserController = async (req, res) => {
     if (fullname !== undefined) user.fullname = fullname.trim();
     if (gender !== undefined) user.gender = gender;
     if (profilePicture !== undefined) user.profilePicture = profilePicture;
-    if(password){
+    if (password) {
       const hashedPassword = await bcrypt.hash(password, 12);
       user.password = hashedPassword;
     }
-    if(updatedAbout) user.about = updatedAbout;
+    if (updatedAbout) user.about = updatedAbout;
+    if (messagePrivacy !== undefined) user.messagePrivacy = messagePrivacy;
 
     await user.save();
 
@@ -35,15 +38,12 @@ const updateUserController = async (req, res) => {
         fullname: user.fullname,
         gender: user.gender,
         profilePicture: user.profilePicture,
-        about: user.about
+        about: user.about,
+        messagePrivacy: user.messagePrivacy,
       },
     });
   } catch (error) {
-    console.error("Error updating user:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error while updating user",
-    });
+    next(error);
   }
 };
 

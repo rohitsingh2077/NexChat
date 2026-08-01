@@ -1,35 +1,52 @@
 const router = require("express").Router();
-const islogin = require('../middleware/islogin.js');
+const islogin = require("../middleware/isLogin.js");
+const {
+  validateSendFriendRequest,
+  validateObjectIdParam,
+} = require("../middleware/validate.js");
 
 const {
   sendFriendRequest,
   acceptFriendRequest,
-  declineFriendRequest,
+  rejectFriendRequest,
+  cancelFriendRequest,
   getFriends,
   getFriendRequests,
   getSentRequests,
-  removeFriend
+  removeFriend,
 } = require("../controllers/friendController");
 
 // send request
-router.post("/request/:id", islogin, sendFriendRequest);
+router.post("/requests", islogin, validateSendFriendRequest, sendFriendRequest);
 
-// accept request
-router.post("/accept/:id", islogin, acceptFriendRequest);
+// incoming / outgoing pending requests
+router.get("/requests/incoming", islogin, getFriendRequests);
+router.get("/requests/outgoing", islogin, getSentRequests);
 
-// decline request
-router.post("/decline/:id", islogin, declineFriendRequest);
+// respond to a specific request
+router.post(
+  "/requests/:requestId/accept",
+  islogin,
+  validateObjectIdParam("requestId"),
+  acceptFriendRequest
+);
+router.post(
+  "/requests/:requestId/reject",
+  islogin,
+  validateObjectIdParam("requestId"),
+  rejectFriendRequest
+);
+router.delete(
+  "/requests/:requestId",
+  islogin,
+  validateObjectIdParam("requestId"),
+  cancelFriendRequest
+);
 
-// remove friend
-router.delete("/remove/:id", islogin, removeFriend);
-
-// get friends
+// friend list
 router.get("/", islogin, getFriends);
 
-// incoming requests
-router.get("/requests", islogin, getFriendRequests);
-
-// sent requests
-router.get("/sent", islogin, getSentRequests);
+// remove friend
+router.delete("/:friendId", islogin, validateObjectIdParam("friendId"), removeFriend);
 
 module.exports = router;

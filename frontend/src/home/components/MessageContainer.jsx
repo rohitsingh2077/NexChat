@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { toast } from "react-toastify";
 import { useChat } from "../../Context/SelectedUser";
 import { useAuth } from "../../Context/authcontext";
 import { useSocketContext } from "../../Context/SocketContext";
@@ -95,9 +96,15 @@ export const Messages = () => {
       isTypingRef.current = false;
     }, 400);
   };
+  // Backend is the real enforcement point (never trust this alone) - this is
+  // just a proactive UI guard so the input doesn't invite a send that will
+  // just get rejected as NOT_FRIENDS_CANNOT_MESSAGE.
+  const isBlocked =
+    selectedUser?.messagePrivacy === "private" && selectedUser?.friendshipStatus !== "FRIENDS";
+
   //handling the send functionality api
   const handleSend = async () => {
-    if (!text.trim() || !selectedUser) return;
+    if (!text.trim() || !selectedUser || isBlocked) return;
 
     const msg = text.trim();
     setText(""); // clear textbox immediately
@@ -109,11 +116,11 @@ export const Messages = () => {
 
       // Backend returns message object EXACTLY as shown
       const savedMessage = res.data;
-      console.log(savedMessage);
       // Add the new message to the chat UI
       setMessages((prev) => [...prev, savedMessage.message]);
     } catch (err) {
       console.error("Error sending message:", err);
+      toast.error(err.response?.data?.message || "Failed to send message");
       // optional: restore text on error
       setText(msg);
     }
@@ -235,41 +242,51 @@ export const Messages = () => {
           <div ref={bottomRef} />
         </div>
         {/* Bottom input bar */}
-        <div className="px-4 py-3 border-t border-white/10 bg-slate-900/40 backdrop-blur-lg flex items-center gap-3">
-          <input
-            type="text"
-            placeholder="Enter your message..."
-            value={text}
-            onChange={handleInput}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            className="
-      flex-1
-      bg-white/10
-      text-white
-      placeholder-white/50
-      px-4 py-2
-      rounded-xl
-      border border-white/10
-      focus:outline-none
-      focus:ring-2 focus:ring-yellow-300
-    "
-          />
+        {isBlocked ? (
+          <div className="px-4 py-4 border-t border-white/10 bg-slate-900/40 text-center text-sm text-white/50">
+            {selectedUser.fullname || selectedUser.displayName || selectedUser.username} only accepts
+            messages from friends.{" "}
+            {selectedUser.friendshipStatus === "REQUEST_SENT"
+              ? "Friend request pending."
+              : "Send a friend request from Chats to start chatting."}
+          </div>
+        ) : (
+          <div className="px-4 py-3 border-t border-white/10 bg-slate-900/40 backdrop-blur-lg flex items-center gap-3">
+            <input
+              type="text"
+              placeholder="Enter your message..."
+              value={text}
+              onChange={handleInput}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
+              className="
+        flex-1
+        bg-white/10
+        text-white
+        placeholder-white/50
+        px-4 py-2
+        rounded-xl
+        border border-white/10
+        focus:outline-none
+        focus:ring-2 focus:ring-yellow-300
+      "
+            />
 
-          <button
-            onClick={handleSend}
-            className="
-      bg-yellow-400
-      text-black
-      px-4 py-2
-      rounded-xl
-      font-semibold
-      hover:bg-yellow-300
-      transition
-    "
-          >
-            Send
-          </button>
-        </div>
+            <button
+              onClick={handleSend}
+              className="
+        bg-yellow-400
+        text-black
+        px-4 py-2
+        rounded-xl
+        font-semibold
+        hover:bg-yellow-300
+        transition
+      "
+            >
+              Send
+            </button>
+          </div>
+        )}
       </div>
       <FriendProfileDialog
         open={showFriendProfile}

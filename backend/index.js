@@ -13,7 +13,8 @@ const authRouter = require('./routes/authRouter');
 const messageRouter = require('./routes/messsageRoute')
 const userRouter =require('./routes/userRouter')
 const updateRouter = require('./routes/updateRouter.js');
-// const friendRouter = require('./routes/friendRoutes.js');
+const friendRouter = require('./routes/friendRoutes.js');
+const errorHandler = require('./middleware/errorHandler.js');
 
 app.use(cookieParser());
 
@@ -25,13 +26,17 @@ app.use('/api/auth',authRouter);
 app.use('/api/message',messageRouter);
 app.use('/api/user',userRouter);
 app.use('/api/update',updateRouter);
-// app.use('/api/friends',friendRouter);
+app.use('/api/friends',friendRouter);
 
 app.use(express.static(path.join(root,'/frontend/dist')));
 
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'frontend', 'dist', 'index.html'));
 });
+
+// Must be registered last: catches errors forwarded via next(error) from any
+// route/middleware above and returns one consistent, safe response shape.
+app.use(errorHandler);
 
 PORT = process.env.PORT || 3001;
 

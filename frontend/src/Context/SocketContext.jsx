@@ -19,10 +19,9 @@ export const SocketContextProvider = ({ children }) => {
       return;
     }
 
-    // create new socket connection
-    const newSocket = io("http://localhost:3000", {
-      auth: { userId: authUser._id },
-      query: { userId: authUser._id },
+    // create new socket connection - identity comes from the jwt cookie
+    // (verified server-side), never from a client-supplied userId
+    const newSocket = io("http://localhost:3003", {
       transports: ["websocket", "polling"],
       withCredentials: true,
     });

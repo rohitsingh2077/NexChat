@@ -4,8 +4,9 @@ const router = express.Router();
 const {sendMessage} = require('../controllers/messageController.js');
 const isLogin = require('../middleware/isLogin.js')
 const {getMessage} = require('../controllers/messageController.js');
+const { validateSendMessage } = require('../middleware/validate.js');
 
-router.post('/send/:id',isLogin,sendMessage);
+router.post('/send/:id',isLogin,validateSendMessage,sendMessage);
 router.get('/:id',isLogin,getMessage);
 // router.get('/unreadCount/:id',islogin,getUnreadCount);
 

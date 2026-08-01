@@ -10,7 +10,7 @@ export const Logout = () => {
   useEffect(() => {
     const doLogout = async () => {
       try {
-        await axios.get("/api/auth/logout", { withCredentials: true });
+        await axios.post("/api/auth/logout", {}, { withCredentials: true });
         localStorage.clear();
         toast.success("Logged out!");
         navigate("/login", { replace: true });

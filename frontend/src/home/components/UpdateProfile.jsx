@@ -8,6 +8,7 @@ const EditProfileDialog = ({ open, onClose, user, onUpdated }) => {
   const [gender, setGender] = useState("");
   const [about, setAbout] = useState("");
   const [profilePicture, setProfilePicture] = useState("");
+  const [messagePrivacy, setMessagePrivacy] = useState("public");
   const [saving, setSaving] = useState(false);
   const { setAuthUser } = useAuth();
 
@@ -19,6 +20,7 @@ const EditProfileDialog = ({ open, onClose, user, onUpdated }) => {
       setAbout(user.about || "");
       // NOTE: backend field is `profilePicture` but your UI uses `profilePic` – align it
       setProfilePicture(user.profilePicture || user.profilePic || "");
+      setMessagePrivacy(user.messagePrivacy || "public");
     }
   }, [user, open]);
 
@@ -28,26 +30,28 @@ const EditProfileDialog = ({ open, onClose, user, onUpdated }) => {
     if (!user?._id) return;
     try {
       setSaving(true);
-      const res = await axios.patch(`/api/update/${user._id}`, {
+      const res = await axios.patch(`/api/update`, {
         fullname: fullName,
         gender,
         about,
         profilePicture,
+        messagePrivacy,
       });
-      console.log(res.data);
       if (res.data?.success) {
         // inform parent / context
         //so data is updated...
         const upatedData = res.data.user;
-        setAuthUser({
+        setAuthUser((prev) => ({
+          ...prev,
           _id: upatedData._id,
           fullname: upatedData.fullname,
-          username: upatedData.username,
-          profilePic: upatedData.profilePic,
-          email: upatedData.email,
           gender: upatedData.gender,
           about: upatedData.about,
-        });
+          messagePrivacy: upatedData.messagePrivacy,
+          // authUser convention (set at login/register) is `profilePic`, not
+          // `profilePicture` - keep that key so ProfileBar/Sidebar still find it.
+          profilePic: upatedData.profilePicture,
+        }));
         toast.success("Data Updated");
       }
     } catch (err) {
@@ -168,6 +172,21 @@ const EditProfileDialog = ({ open, onClose, user, onUpdated }) => {
                   className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm outline-none focus:border-white/60 resize-none"
                   placeholder="Say something about yourself..."
                 />
+              </div>
+
+              {/* Message privacy */}
+              <div>
+                <label className="block text-xs text-white/60 mb-1">
+                  Who can message you
+                </label>
+                <select
+                  value={messagePrivacy}
+                  onChange={(e) => setMessagePrivacy(e.target.value)}
+                  className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm outline-none focus:border-white/60"
+                >
+                  <option value="public">Everyone</option>
+                  <option value="private">Friends only</option>
+                </select>
               </div>
             </div>
           </div>

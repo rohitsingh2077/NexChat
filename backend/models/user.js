@@ -35,19 +35,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "Hey I am using NexChat",
     },
-    friends: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        default: [],
-      },
-    ],
-    friendRequests: [
-      { type: mongoose.Schema.Types.ObjectId, ref: "User", default: [] },
-    ],
-    sentRequests: [
-      { type: mongoose.Schema.Types.ObjectId, ref: "User", default: [] },
-    ],
+    // 'public' = anyone can message this user; 'private' = only accepted
+    // friends can (enforced server-side in messageController.sendMessage,
+    // never trusted from the client). Defaults to 'public' so existing
+    // behavior is unchanged for everyone who hasn't opted in.
+    messagePrivacy: {
+      type: String,
+      enum: ["public", "private"],
+      default: "public",
+    },
+    // Friendship/friend-request state lives in the FriendRequest collection
+    // (see friendRequestModel.js) - not embedded here, so requests can be
+    // addressed by their own id and accepted via a single atomic update.
   },
   { timestamps: true }
 );

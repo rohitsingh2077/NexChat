@@ -1,5 +1,8 @@
 const Conversation = require("../models/conversationModel");
 const Message = require("../models/messageModel");
+const User = require("../models/user");
+const friendService = require("../services/friendService");
+const AppError = require("../utils/AppError");
 const { io, getRecieverSocket } = require("../Socket/socket");
 
 const sendMessage = async (req, res, next) => {
@@ -7,6 +10,17 @@ const sendMessage = async (req, res, next) => {
     const { message } = req.body;
     const { id: recieverId } = req.params;
     const senderId = req.user._id;
+
+    const receiver = await User.findById(recieverId).select("messagePrivacy");
+    if (!receiver) {
+      return next(new AppError(404, "USER_NOT_FOUND"));
+    }
+    if (receiver.messagePrivacy === "private") {
+      const isFriend = await friendService.areFriends(senderId, recieverId);
+      if (!isFriend) {
+        return next(new AppError(403, "NOT_FRIENDS_CANNOT_MESSAGE"));
+      }
+    }
 
     let chats = await Conversation.findOne({
       participants: { $all: [senderId, recieverId] },
@@ -16,7 +30,7 @@ const sendMessage = async (req, res, next) => {
         participants: [senderId, recieverId],
       });
     }
-    
+
     const newMessage = new Message({
       senderId,
       recieverId,
@@ -32,14 +46,10 @@ const sendMessage = async (req, res, next) => {
     /*socket.io functioning*/
     /* ----------------------*/
     // Convert recieverId to string since userSocketMap keys are stored as strings
+
     const recieverSocketId = getRecieverSocket(recieverId.toString());
     if (recieverSocketId) {
       io.to(recieverSocketId).emit("newMessage", newMessage);
-      // console.log(`✅ Message emitted to receiver socket: ${recieverSocketId}`);
-    } else {
-      console.log(
-        // `❌ Receiver ${recieverId.toString()} not connected. Message saved but not emitted.`
-      );
     }
 
     return res.status(201).json({
@@ -48,14 +58,11 @@ const sendMessage = async (req, res, next) => {
       senderName: `${req.user.fullname}`,
     });
   } catch (error) {
-    return res.status(500).send({
-      success: false,
-      message: `there is some error sending message -- ${error}`,
-    });
+    next(error);
   }
 };
 
-const getMessage = async (req, res) => {
+const getMessage = async (req, res, next) => {
   try {
     const senderId = req.user._id;
     const { id: recieverId } = req.params;
@@ -75,11 +82,7 @@ const getMessage = async (req, res) => {
       messages: chats.messages,
     });
   } catch (error) {
-    console.error("Error getting messages:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error retrieving messages.",
-    });
+    next(error);
   }
 };
 
