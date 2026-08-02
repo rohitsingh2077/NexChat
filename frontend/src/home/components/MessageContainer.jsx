@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useChat } from "../../Context/SelectedUser";
@@ -6,6 +6,8 @@ import { useAuth } from "../../Context/authcontext";
 import { useSocketContext } from "../../Context/SocketContext";
 import TypingIndicator from "./TypingIndicator";
 import FriendProfileDialog from "./friendProfile";
+
+const PAGE_SIZE = 30;
 
 export const Messages = () => {
   const { selectedUser } = useChat();
@@ -19,6 +21,17 @@ export const Messages = () => {
   const typingTimeoutRef = useRef(null); //to save in re renders
   const isTypingRef = useRef(false);
   const [showFriendProfile, setShowFriendProfile] = useState(false);
+
+  // Cursor pagination for message history - see docs/interview-notes for
+  // the full design. hasMore/nextCursor come from the last page fetched;
+  // scrollContainerRef + pendingOlderScrollAdjustRef exist purely to keep
+  // the viewport visually still when older messages are prepended above
+  // what's currently on screen.
+  const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const scrollContainerRef = useRef(null);
+  const pendingOlderScrollAdjustRef = useRef(null);
 
   //listening for the incoming typing socket
   useEffect(() => {
@@ -102,43 +115,80 @@ export const Messages = () => {
   const isBlocked =
     selectedUser?.messagePrivacy === "private" && selectedUser?.friendshipStatus !== "FRIENDS";
 
-  //handling the send functionality api
-  const handleSend = async () => {
-    if (!text.trim() || !selectedUser || isBlocked) return;
-
-    const msg = text.trim();
-    setText(""); // clear textbox immediately
+  // Sends (or resends) one logical message identified by clientMessageId.
+  // Reusing the same id on retry is what makes a resend safe - the backend
+  // recognizes it as the same attempt instead of creating a duplicate
+  // message (see messageModel.js LEARNING NOTES).
+  const sendOrRetry = async (msg, clientMessageId, isRetry) => {
+    setMessages((prev) =>
+      isRetry
+        ? prev.map((m) =>
+            m.clientMessageId === clientMessageId ? { ...m, status: "sending" } : m
+          )
+        : [
+            ...prev,
+            {
+              clientMessageId,
+              senderId: currentUserId,
+              message: msg,
+              status: "sending",
+            },
+          ]
+    );
 
     try {
       const res = await axios.post(`/api/message/send/${selectedUser._id}`, {
         message: msg,
+        clientMessageId,
       });
-
-      // Backend returns message object EXACTLY as shown
-      const savedMessage = res.data;
-      // Add the new message to the chat UI
-      setMessages((prev) => [...prev, savedMessage.message]);
+      const savedMessage = res.data.message;
+      // Reconcile the optimistic bubble with the server-confirmed message
+      // (real _id, createdAt, status) by matching on clientMessageId.
+      setMessages((prev) =>
+        prev.map((m) => (m.clientMessageId === clientMessageId ? savedMessage : m))
+      );
     } catch (err) {
       console.error("Error sending message:", err);
       toast.error(err.response?.data?.message || "Failed to send message");
-      // optional: restore text on error
-      setText(msg);
+      // Roll back to a failed state rather than removing the bubble, so the
+      // user can retry without retyping - retry reuses the same
+      // clientMessageId above.
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.clientMessageId === clientMessageId ? { ...m, status: "failed" } : m
+        )
+      );
     }
   };
-  // fetching all the messages
+
+  const handleSend = () => {
+    if (!text.trim() || !selectedUser || isBlocked) return;
+
+    const msg = text.trim();
+    setText(""); // clear textbox immediately
+    sendOrRetry(msg, crypto.randomUUID(), false);
+  };
+
+  const handleRetry = (m) => sendOrRetry(m.message, m.clientMessageId, true);
+  // fetching the most recent page of messages
   useEffect(() => {
     if (!selectedUser) {
       setMessages([]);
+      setHasMore(false);
+      setNextCursor(null);
       return;
     }
 
     const fetchMessages = async () => {
       try {
         setLoading(true);
-        const res = await axios.get(`/api/message/${selectedUser._id}`);
-        console.log(res.data.messages);
+        const res = await axios.get(`/api/message/${selectedUser._id}`, {
+          params: { limit: PAGE_SIZE },
+        });
         if (res.data && res.data.success) {
           setMessages(res.data.messages || []);
+          setHasMore(res.data.hasMore);
+          setNextCursor(res.data.nextCursor);
         }
       } catch (err) {
         console.error("Failed to fetch messages", err);
@@ -149,8 +199,48 @@ export const Messages = () => {
 
     fetchMessages();
   }, [selectedUser]);
-  //scrolling useEffect
-  useEffect(() => {
+
+  // Fetches the next-older page and prepends it. Captures the scroll
+  // container's current scrollHeight before the DOM updates, so the
+  // layout effect below can restore the same visual position afterward
+  // instead of the viewport jumping to show the newly inserted content.
+  const loadOlderMessages = async () => {
+    if (!selectedUser || !hasMore || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const res = await axios.get(`/api/message/${selectedUser._id}`, {
+        params: { cursor: nextCursor, limit: PAGE_SIZE },
+      });
+      if (res.data && res.data.success) {
+        if (scrollContainerRef.current) {
+          pendingOlderScrollAdjustRef.current = scrollContainerRef.current.scrollHeight;
+        }
+        setMessages((prev) => [...(res.data.messages || []), ...prev]);
+        setHasMore(res.data.hasMore);
+        setNextCursor(res.data.nextCursor);
+      }
+    } catch (err) {
+      console.error("Failed to load older messages", err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  const handleMessagesScroll = (e) => {
+    if (e.target.scrollTop < 80) {
+      loadOlderMessages();
+    }
+  };
+
+  //scrolling effect - either restores position after prepending older
+  //messages, or scrolls to the bottom for a new/sent message (the default).
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (pendingOlderScrollAdjustRef.current !== null && container) {
+      container.scrollTop = container.scrollHeight - pendingOlderScrollAdjustRef.current;
+      pendingOlderScrollAdjustRef.current = null;
+      return;
+    }
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
@@ -193,9 +283,19 @@ export const Messages = () => {
         </button>
 
         {/* Messages list */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleMessagesScroll}
+          className="flex-1 overflow-y-auto px-4 py-3 space-y-2"
+        >
           {loading && (
             <p className="text-xs text-white/60">Loading messages...</p>
+          )}
+
+          {!loading && loadingOlder && (
+            <p className="text-xs text-white/40 text-center pb-2">
+              Loading older messages...
+            </p>
           )}
 
           {!loading && messages.length === 0 && (
@@ -214,25 +314,45 @@ export const Messages = () => {
                 ? m.senderId._id || m.senderId.id || ""
                 : m.senderId;
             const isMine = String(senderId) === String(currentUserId);
+            const isFailed = m.status === "failed";
+            const isSending = m.status === "sending";
 
             return (
               <div
-                key={m._id}
+                key={m.clientMessageId || m._id}
                 className={`w-fit max-w-[80%] px-3 py-2 rounded-2xl text-sm shadow-sm ${
                   isMine
-                    ? "ml-auto bg-green-500 text-white rounded-br-none"
+                    ? isFailed
+                      ? "ml-auto bg-red-500/70 text-white rounded-br-none"
+                      : "ml-auto bg-green-500 text-white rounded-br-none"
                     : "mr-auto bg-blue-500 text-white rounded-bl-none"
-                }`}
+                } ${isSending ? "opacity-60" : ""}`}
               >
                 <p>{m.message}</p>
-                {m.createdAt && (
-                  <p className="mt-1 text-[10px] opacity-70 text-right">
-                    {new Date(m.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                )}
+                <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
+                  {isFailed ? (
+                    <button
+                      onClick={() => handleRetry(m)}
+                      className="underline underline-offset-2"
+                    >
+                      Failed to send · Retry
+                    </button>
+                  ) : isSending ? (
+                    <span>Sending...</span>
+                  ) : (
+                    <>
+                      {m.createdAt && (
+                        <span>
+                          {new Date(m.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      )}
+                      {isMine && <span>{m.status === "delivered" ? "✓✓" : "✓"}</span>}
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}

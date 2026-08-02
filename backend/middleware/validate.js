@@ -24,9 +24,12 @@ const validateLogin = (req, res, next) => {
 };
 
 const validateSendMessage = (req, res, next) => {
-  const { message } = req.body || {};
+  const { message, clientMessageId } = req.body || {};
   if (!isNonEmptyString(message)) return next(new AppError(400, "message is required"));
   if (message.length > 5000) return next(new AppError(400, "message is too long"));
+  if (!isNonEmptyString(clientMessageId) || clientMessageId.length > 100) {
+    return next(new AppError(400, "clientMessageId is required"));
+  }
   next();
 };
 
@@ -59,6 +62,22 @@ const validateObjectIdParam = (paramName) => (req, res, next) => {
   next();
 };
 
+const MAX_MESSAGE_PAGE_SIZE = 100;
+
+const validateGetMessages = (req, res, next) => {
+  const { cursor, limit } = req.query || {};
+  if (cursor !== undefined && !isValidObjectId(cursor)) {
+    return next(new AppError(400, "cursor must be a valid id"));
+  }
+  if (limit !== undefined) {
+    const parsed = Number(limit);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_MESSAGE_PAGE_SIZE) {
+      return next(new AppError(400, `limit must be an integer between 1 and ${MAX_MESSAGE_PAGE_SIZE}`));
+    }
+  }
+  next();
+};
+
 module.exports = {
   validateRegister,
   validateLogin,
@@ -66,4 +85,5 @@ module.exports = {
   validateUpdateProfile,
   validateSendFriendRequest,
   validateObjectIdParam,
+  validateGetMessages,
 };

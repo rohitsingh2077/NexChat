@@ -4,10 +4,10 @@ const router = express.Router();
 const {sendMessage} = require('../controllers/messageController.js');
 const isLogin = require('../middleware/isLogin.js')
 const {getMessage} = require('../controllers/messageController.js');
-const { validateSendMessage } = require('../middleware/validate.js');
+const { validateSendMessage, validateGetMessages } = require('../middleware/validate.js');
 
 router.post('/send/:id',isLogin,validateSendMessage,sendMessage);
-router.get('/:id',isLogin,getMessage);
+router.get('/:id',isLogin,validateGetMessages,getMessage);
 // router.get('/unreadCount/:id',islogin,getUnreadCount);
 
 module.exports = router;
