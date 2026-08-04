@@ -4,7 +4,7 @@ const dbconnect  = require('./DB/dbconnect')
 dotenv.config(); // can access the dotenv from anywhere
 const cookieParser = require("cookie-parser");
 
-const {app,server} = require('./Socket/socket.js');
+const {app,server} = require('./realtime/socket.js');
 const path = require("path");
 const root = path.resolve();
 

@@ -2,7 +2,12 @@ const express = require("express");
 const http = require("http");
 const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io"); //correct import
-const messageService = require("../services/messageService");
+
+const registerPresenceHandlers = require("./handlers/presenceHandler");
+const registerTypingHandlers = require("./handlers/typingHandler");
+const registerDmHandlers = require("./handlers/dmHandler");
+const registerServerRoomHandlers = require("./handlers/serverRoomHandler");
+const registerChannelHandlers = require("./handlers/channelHandler");
 
 const app = express();
 const server = http.createServer(app);
@@ -57,58 +62,17 @@ io.use((socket, next) => {
   }
 });
 
+// Each connection just wires up every handler group - all the actual event
+// logic lives in realtime/handlers/*.js, grouped by concern (presence, DM
+// typing/receipts, server/channel room membership, channel messaging).
 io.on("connection", (socket) => {
   console.log(" Socket connected:", socket.id);
 
-  const userId = socket.userId;
-  if (userId) {
-    userSocketMap[userId] = socket.id;
-
-    // emit online users to all connected clients
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
-  }
-
-  // handle disconnect
-  socket.on("disconnect", () => {
-    console.log("❌ Socket disconnected:", socket.id);
-
-    if (userId && userSocketMap[userId] === socket.id) {
-      delete userSocketMap[userId];
-      console.log("Removed user from map:", userId);
-      // broadcast updated online users list
-      io.emit("getOnlineUsers", Object.keys(userSocketMap));
-    }
-  });
-  socket.on("typing", ({ to }) => {
-    const receiverSocket = userSocketMap[to];
-    if (receiverSocket) {
-      io.to(receiverSocket).emit("typing", socket.userId);
-    }
-  });
-
-  socket.on("stopTyping", ({ to }) => {
-    const receiverSocket = userSocketMap[to];
-    if (receiverSocket) {
-      io.to(receiverSocket).emit("stopTyping", socket.userId);
-    }
-  });
-
-  // Read receipt: peerId is who the viewer (this authenticated socket) is
-  // currently looking at. viewerId always comes from socket.userId (the
-  // verified jwt), never the payload - see messageService.markConversationSeen.
-  socket.on("message:seen", async ({ peerId }) => {
-    try {
-      const { updated } = await messageService.markConversationSeen(userId, peerId);
-      if (updated === 0) return;
-
-      const peerSocketId = userSocketMap[peerId];
-      if (peerSocketId) {
-        io.to(peerSocketId).emit("message:seen", { by: userId });
-      }
-    } catch (error) {
-      console.error("message:seen failed:", error.message);
-    }
-  });
+  registerPresenceHandlers(io, socket, userSocketMap);
+  registerTypingHandlers(io, socket, userSocketMap);
+  registerDmHandlers(io, socket, userSocketMap);
+  registerServerRoomHandlers(io, socket);
+  registerChannelHandlers(io, socket);
 });
 
 module.exports = { io, app, server, getRecieverSocket };

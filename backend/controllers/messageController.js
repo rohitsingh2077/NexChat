@@ -3,7 +3,7 @@ const Message = require("../models/messageModel");
 const User = require("../models/user");
 const friendService = require("../services/friendService");
 const AppError = require("../utils/AppError");
-const { io, getRecieverSocket } = require("../Socket/socket");
+const { io, getRecieverSocket } = require("../realtime/socket");
 
 const sendMessage = async (req, res, next) => {
   try {

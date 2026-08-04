@@ -26,9 +26,17 @@ export const SocketContextProvider = ({ children }) => {
       withCredentials: true,
     });
     
-    // online users update
+    // Initial snapshot (once, right after connecting) + incremental deltas
+    // as other users connect/disconnect - see backend/realtime/handlers/presenceHandler.js
+    // for why this replaced resending the whole list on every change.
     newSocket.on("getOnlineUsers", (users) => {
       setOnlineUser(users);
+    });
+    newSocket.on("user_online", ({ userId }) => {
+      setOnlineUser((prev) => (prev.includes(userId) ? prev : [...prev, userId]));
+    });
+    newSocket.on("user_offline", ({ userId }) => {
+      setOnlineUser((prev) => prev.filter((id) => id !== userId));
     });
 
     setSocket(newSocket);

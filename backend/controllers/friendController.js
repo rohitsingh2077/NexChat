@@ -1,5 +1,5 @@
 const friendService = require("../services/friendService");
-const { io, getRecieverSocket } = require("../Socket/socket");
+const { io, getRecieverSocket } = require("../realtime/socket");
 
 const shapeUser = (user) => ({
   _id: user._id,
