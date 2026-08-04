@@ -14,6 +14,7 @@ const messageRouter = require('./routes/messsageRoute')
 const userRouter =require('./routes/userRouter')
 const updateRouter = require('./routes/updateRouter.js');
 const friendRouter = require('./routes/friendRoutes.js');
+const serverRouter = require('./modules/servers/server.routes.js');
 const errorHandler = require('./middleware/errorHandler.js');
 
 app.use(cookieParser());
@@ -27,6 +28,7 @@ app.use('/api/message',messageRouter);
 app.use('/api/user',userRouter);
 app.use('/api/update',updateRouter);
 app.use('/api/friends',friendRouter);
+app.use('/api/servers',serverRouter);
 
 app.use(express.static(path.join(root,'/frontend/dist')));
 

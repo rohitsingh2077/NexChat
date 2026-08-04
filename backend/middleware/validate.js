@@ -78,6 +78,38 @@ const validateGetMessages = (req, res, next) => {
   next();
 };
 
+const MAX_SERVER_NAME = 100;
+const MAX_SERVER_DESCRIPTION = 500;
+
+const validateCreateServer = (req, res, next) => {
+  const { name, description, icon } = req.body || {};
+  if (!isNonEmptyString(name) || name.length > MAX_SERVER_NAME) {
+    return next(new AppError(400, `name is required (max ${MAX_SERVER_NAME} chars)`));
+  }
+  if (
+    description !== undefined &&
+    (typeof description !== "string" || description.length > MAX_SERVER_DESCRIPTION)
+  ) {
+    return next(
+      new AppError(400, `description must be a string up to ${MAX_SERVER_DESCRIPTION} chars`)
+    );
+  }
+  if (icon !== undefined && typeof icon !== "string") {
+    return next(new AppError(400, "icon must be a string"));
+  }
+  next();
+};
+
+const MAX_CHANNEL_NAME = 100;
+
+const validateCreateChannel = (req, res, next) => {
+  const { name } = req.body || {};
+  if (!isNonEmptyString(name) || name.length > MAX_CHANNEL_NAME) {
+    return next(new AppError(400, `name is required (max ${MAX_CHANNEL_NAME} chars)`));
+  }
+  next();
+};
+
 module.exports = {
   validateRegister,
   validateLogin,
@@ -86,4 +118,6 @@ module.exports = {
   validateSendFriendRequest,
   validateObjectIdParam,
   validateGetMessages,
+  validateCreateServer,
+  validateCreateChannel,
 };
