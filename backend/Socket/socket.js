@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io"); //correct import
+const messageService = require("../services/messageService");
 
 const app = express();
 const server = http.createServer(app);
@@ -89,6 +90,23 @@ io.on("connection", (socket) => {
     const receiverSocket = userSocketMap[to];
     if (receiverSocket) {
       io.to(receiverSocket).emit("stopTyping", socket.userId);
+    }
+  });
+
+  // Read receipt: peerId is who the viewer (this authenticated socket) is
+  // currently looking at. viewerId always comes from socket.userId (the
+  // verified jwt), never the payload - see messageService.markConversationSeen.
+  socket.on("message:seen", async ({ peerId }) => {
+    try {
+      const { updated } = await messageService.markConversationSeen(userId, peerId);
+      if (updated === 0) return;
+
+      const peerSocketId = userSocketMap[peerId];
+      if (peerSocketId) {
+        io.to(peerSocketId).emit("message:seen", { by: userId });
+      }
+    } catch (error) {
+      console.error("message:seen failed:", error.message);
     }
   });
 });

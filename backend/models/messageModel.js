@@ -29,12 +29,13 @@ const messageSchema = new mongoose.Schema({
     required: true,
   },
   // 'sent' = persisted; 'delivered' = the receiver's socket actually
-  // received the realtime push. Not a read receipt - just tells the sender
-  // whether realtime delivery worked or the receiver will only see this on
-  // their next fetch/reconnect.
+  // received the realtime push; 'seen' = the receiver has had the
+  // conversation open while this message was present (read receipt, set via
+  // messageService.markConversationSeen). Not a delivery guarantee on its
+  // own - see LEARNING NOTES.
   status: {
     type: String,
-    enum: ['sent', 'delivered'],
+    enum: ['sent', 'delivered', 'seen'],
     default: 'sent',
   },
 }, { timestamps: true });

@@ -64,6 +64,12 @@ export const Messages = () => {
     }
     const handler = (newMessage) => {
       setMessages((prev) => [...prev, newMessage]);
+      // I'm receiving this in realtime while that sender's chat is open, so
+      // I'm viewing it immediately - tell the server so the sender gets a
+      // seen receipt (see backend/Socket/socket.js message:seen contract).
+      if (selectedUser && String(newMessage.senderId) === String(selectedUser._id)) {
+        socket.emit("message:seen", { peerId: selectedUser._id });
+      }
     };
     // Directly use the callback passed as prop: newMessage
     socket.on("newMessage", handler);
@@ -71,7 +77,7 @@ export const Messages = () => {
     return () => {
       socket.off("newMessage", handler);
     };
-  }, [socket]);
+  }, [socket, selectedUser]);
 
   // determine current user id once (prefer auth context, fallback to chatApp or explicit userId)
   const parsedChatApp = (() => {
@@ -88,6 +94,27 @@ export const Messages = () => {
       (parsedChatApp._id || parsedChatApp.user?._id || parsedChatApp.userId)) ||
     localStorage.getItem("userId") ||
     null;
+
+  // Someone I've sent messages to just viewed our conversation - flip my
+  // sent/delivered bubbles to "seen". Only applies to the peer currently
+  // open, since that's the only conversation rendered in `messages`.
+  useEffect(() => {
+    if (!socket) return;
+    const handleSeen = ({ by }) => {
+      if (!selectedUser || String(by) !== String(selectedUser._id)) return;
+      setMessages((prev) =>
+        prev.map((m) => {
+          const senderId = m.senderId && typeof m.senderId === "object" ? m.senderId._id : m.senderId;
+          const isMine = String(senderId) === String(currentUserId);
+          const isPending = m.status === "failed" || m.status === "sending";
+          return isMine && !isPending ? { ...m, status: "seen" } : m;
+        })
+      );
+    };
+    socket.on("message:seen", handleSeen);
+    return () => socket.off("message:seen", handleSeen);
+  }, [socket, selectedUser, currentUserId]);
+
   //handling the input of the message box
   const handleInput = (e) => {
     setText(e.target.value);
@@ -189,6 +216,11 @@ export const Messages = () => {
           setMessages(res.data.messages || []);
           setHasMore(res.data.hasMore);
           setNextCursor(res.data.nextCursor);
+          // Opening this conversation means I've now viewed whatever's on
+          // this first page - tell the server so senders get seen receipts.
+          if (socket && (res.data.messages || []).length > 0) {
+            socket.emit("message:seen", { peerId: selectedUser._id });
+          }
         }
       } catch (err) {
         console.error("Failed to fetch messages", err);
@@ -198,7 +230,7 @@ export const Messages = () => {
     };
 
     fetchMessages();
-  }, [selectedUser]);
+  }, [selectedUser, socket]);
 
   // Fetches the next-older page and prepends it. Captures the scroll
   // container's current scrollHeight before the DOM updates, so the
@@ -349,7 +381,11 @@ export const Messages = () => {
                           })}
                         </span>
                       )}
-                      {isMine && <span>{m.status === "delivered" ? "✓✓" : "✓"}</span>}
+                      {isMine && (
+                        <span className={m.status === "seen" ? "text-red-500" : ""}>
+                          {m.status === "delivered" || m.status === "seen" ? "✓✓" : "✓"}
+                        </span>
+                      )}
                     </>
                   )}
                 </div>
