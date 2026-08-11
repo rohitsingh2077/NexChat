@@ -25,4 +25,15 @@ const requireRole = (roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { isServerMember, requireRole };
+// Must run after isServerMember. Blocks a member whose allowedChannelIds
+// doesn't include :channelId - see serverMembership.model.js and
+// server.service.js canAccessChannel. Owner/admin always pass (their
+// membership never has allowedChannelIds set).
+const requireChannelAccess = (req, res, next) => {
+  if (!req.membership || !serverService.canAccessChannel(req.membership, req.params.channelId)) {
+    return next(new AppError(403, "CHANNEL_ACCESS_RESTRICTED"));
+  }
+  next();
+};
+
+module.exports = { isServerMember, requireRole, requireChannelAccess };

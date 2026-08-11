@@ -82,7 +82,7 @@ const MAX_SERVER_NAME = 100;
 const MAX_SERVER_DESCRIPTION = 500;
 
 const validateCreateServer = (req, res, next) => {
-  const { name, description, icon } = req.body || {};
+  const { name, description, icon, joinPolicy } = req.body || {};
   if (!isNonEmptyString(name) || name.length > MAX_SERVER_NAME) {
     return next(new AppError(400, `name is required (max ${MAX_SERVER_NAME} chars)`));
   }
@@ -96,6 +96,31 @@ const validateCreateServer = (req, res, next) => {
   }
   if (icon !== undefined && typeof icon !== "string") {
     return next(new AppError(400, "icon must be a string"));
+  }
+  if (joinPolicy !== undefined && !["open", "approval_required"].includes(joinPolicy)) {
+    return next(new AppError(400, "joinPolicy must be 'open' or 'approval_required'"));
+  }
+  next();
+};
+
+const MAX_ALLOWED_CHANNELS = 100;
+
+const validateApproveJoinRequest = (req, res, next) => {
+  const { allowedChannelIds } = req.body || {};
+  if (allowedChannelIds === undefined) return next();
+  if (!Array.isArray(allowedChannelIds) || allowedChannelIds.length > MAX_ALLOWED_CHANNELS) {
+    return next(new AppError(400, "allowedChannelIds must be an array of channel ids"));
+  }
+  if (!allowedChannelIds.every(isValidObjectId)) {
+    return next(new AppError(400, "allowedChannelIds must all be valid channel ids"));
+  }
+  next();
+};
+
+const validateUpdateMemberRole = (req, res, next) => {
+  const { role } = req.body || {};
+  if (!["member", "admin"].includes(role)) {
+    return next(new AppError(400, "role must be 'member' or 'admin'"));
   }
   next();
 };
@@ -120,4 +145,6 @@ module.exports = {
   validateGetMessages,
   validateCreateServer,
   validateCreateChannel,
+  validateApproveJoinRequest,
+  validateUpdateMemberRole,
 };

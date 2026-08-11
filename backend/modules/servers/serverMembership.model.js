@@ -17,6 +17,15 @@ const serverMembershipSchema = new mongoose.Schema(
       enum: ["owner", "admin", "member"],
       default: "member",
     },
+    // null/unset = unrestricted (can access every text channel in the
+    // server - the default for open-join members and the owner). A
+    // non-null array restricts this member to exactly those channels - set
+    // by an owner/admin when approving an approval_required join request.
+    // See server.service.js canAccessChannel.
+    allowedChannelIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Channel" }],
+      default: null,
+    },
   },
   { timestamps: true } // createdAt doubles as "joinedAt" - no separate field needed
 );

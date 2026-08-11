@@ -2,11 +2,12 @@ const serverService = require("./server.service");
 
 const createServer = async (req, res, next) => {
   try {
-    const { name, description, icon } = req.body;
+    const { name, description, icon, joinPolicy } = req.body;
     const { server, defaultChannel } = await serverService.createServer(req.user._id, {
       name,
       description,
       icon,
+      joinPolicy,
     });
     return res.status(201).json({ success: true, server, defaultChannel });
   } catch (error) {
@@ -23,6 +24,15 @@ const listMyServers = async (req, res, next) => {
   }
 };
 
+const discoverServers = async (req, res, next) => {
+  try {
+    const results = await serverService.discoverServers(req.user._id, req.query.search);
+    return res.status(200).json({ success: true, results });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getServer = async (req, res, next) => {
   try {
     const server = await serverService.getServerById(req.params.serverId);
@@ -34,13 +44,51 @@ const getServer = async (req, res, next) => {
 
 const joinServer = async (req, res, next) => {
   try {
-    const { membership, alreadyMember } = await serverService.joinServer(
+    const { outcome, membership, request } = await serverService.joinServer(
       req.params.serverId,
       req.user._id
     );
-    return res
-      .status(alreadyMember ? 200 : 201)
-      .json({ success: true, alreadyMember, role: membership.role });
+    const statusCode = outcome === "already_member" ? 200 : 201;
+    return res.status(statusCode).json({
+      success: true,
+      outcome, // "joined" | "already_member" | "pending"
+      role: membership?.role,
+      requestId: request?._id,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const listJoinRequests = async (req, res, next) => {
+  try {
+    const requests = await serverService.listJoinRequests(req.params.serverId);
+    return res.status(200).json({
+      success: true,
+      requests: requests.map((r) => ({ requestId: r._id, user: r.userId, createdAt: r.createdAt })),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const approveJoinRequest = async (req, res, next) => {
+  try {
+    await serverService.approveJoinRequest(
+      req.params.serverId,
+      req.params.requestId,
+      req.body.allowedChannelIds
+    );
+    return res.status(200).json({ success: true, message: "Join request approved" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const rejectJoinRequest = async (req, res, next) => {
+  try {
+    await serverService.rejectJoinRequest(req.params.serverId, req.params.requestId);
+    return res.status(200).json({ success: true, message: "Join request rejected" });
   } catch (error) {
     next(error);
   }
@@ -55,6 +103,28 @@ const leaveServer = async (req, res, next) => {
   }
 };
 
+const kickMember = async (req, res, next) => {
+  try {
+    await serverService.kickMember(req.params.serverId, req.params.userId);
+    return res.status(200).json({ success: true, message: "Member removed" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateMemberRole = async (req, res, next) => {
+  try {
+    const membership = await serverService.updateMemberRole(
+      req.params.serverId,
+      req.params.userId,
+      req.body.role
+    );
+    return res.status(200).json({ success: true, role: membership.role });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const listMembers = async (req, res, next) => {
   try {
     const members = await serverService.listMembers(req.params.serverId);
@@ -64,4 +134,17 @@ const listMembers = async (req, res, next) => {
   }
 };
 
-module.exports = { createServer, listMyServers, getServer, joinServer, leaveServer, listMembers };
+module.exports = {
+  createServer,
+  listMyServers,
+  discoverServers,
+  getServer,
+  joinServer,
+  listJoinRequests,
+  approveJoinRequest,
+  rejectJoinRequest,
+  leaveServer,
+  kickMember,
+  updateMemberRole,
+  listMembers,
+};

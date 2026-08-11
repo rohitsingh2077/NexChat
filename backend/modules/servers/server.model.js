@@ -10,6 +10,15 @@ const serverSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    // 'open' = joinServer creates membership immediately (existing behavior).
+    // 'approval_required' = joinServer creates a ServerJoinRequest instead;
+    // an owner/admin must approve it before a ServerMembership exists.
+    // See server.service.js joinServer/approveJoinRequest.
+    joinPolicy: {
+      type: String,
+      enum: ["open", "approval_required"],
+      default: "open",
+    },
   },
   { timestamps: true }
 );

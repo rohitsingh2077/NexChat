@@ -11,7 +11,7 @@ const createChannel = async (req, res, next) => {
 
 const listChannels = async (req, res, next) => {
   try {
-    const channels = await channelService.listChannels(req.params.serverId);
+    const channels = await channelService.listChannels(req.params.serverId, req.membership);
     return res.status(200).json({ success: true, channels });
   } catch (error) {
     next(error);

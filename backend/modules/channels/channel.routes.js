@@ -8,7 +8,7 @@ const {
   validateObjectIdParam,
   validateGetMessages,
 } = require("../../middleware/validate");
-const { requireRole } = require("../servers/server.middleware");
+const { requireRole, requireChannelAccess } = require("../servers/server.middleware");
 const { createChannel, listChannels, deleteChannel } = require("./channel.controller");
 const { getChannelMessages } = require("../channelMessages/channelMessage.controller");
 
@@ -30,6 +30,7 @@ router.delete(
 router.get(
   "/:channelId/messages",
   validateObjectIdParam("channelId"),
+  requireChannelAccess,
   validateGetMessages,
   getChannelMessages
 );
