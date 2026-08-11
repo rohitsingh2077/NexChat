@@ -3,6 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useChat } from "../../Context/SelectedUser";
 import { useSocketContext } from "../../Context/SocketContext";
+import { useProfileModal } from "../../Context/ProfileModalContext";
 import { ChatIcon, FriendsIcon, MoreIcon, SearchIcon } from "./icons";
 
 // Dedicated "Friends" view - GET /api/friends is the source of truth here,
@@ -19,6 +20,7 @@ export const FriendsList = ({ onOpenChat, incomingRequests, onIncomingChange }) 
   const [openMenuId, setOpenMenuId] = useState(null);
   const { setSelectedUser } = useChat();
   const { onlineUser, socket } = useSocketContext();
+  const { openProfile } = useProfileModal();
 
   const fetchFriends = async () => {
     try {
@@ -119,20 +121,22 @@ export const FriendsList = ({ onOpenChat, incomingRequests, onIncomingChange }) 
         key={friend._id}
         className="flex items-center gap-3 px-5 py-2.5 hover:bg-white/5 rounded-lg group"
       >
-        <div className="w-9 h-9 rounded-full bg-yellow-400 flex items-center justify-center text-black font-semibold shrink-0 overflow-hidden">
-          {friend.avatar ? (
-            <img src={friend.avatar} alt="Profile" className="w-full h-full object-cover" />
-          ) : (
-            name?.charAt(0).toUpperCase() || "U"
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-white truncate">{name}</p>
-          <p className={`text-xs flex items-center gap-1.5 ${isOnline ? "text-green-400" : "text-white/40"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-green-400" : "bg-white/30"}`} />
-            {isOnline ? "Online" : "Offline"}
-          </p>
-        </div>
+        <button onClick={() => openProfile(friend._id)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+          <div className="w-9 h-9 rounded-full bg-yellow-400 flex items-center justify-center text-black font-semibold shrink-0 overflow-hidden">
+            {friend.avatar ? (
+              <img src={friend.avatar} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              name?.charAt(0).toUpperCase() || "U"
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white truncate">{name}</p>
+            <p className={`text-xs flex items-center gap-1.5 ${isOnline ? "text-green-400" : "text-white/40"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-green-400" : "bg-white/30"}`} />
+              {isOnline ? "Online" : "Offline"}
+            </p>
+          </div>
+        </button>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition shrink-0">
           <button
             onClick={() => handleMessage(friend)}

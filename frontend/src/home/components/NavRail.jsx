@@ -1,10 +1,11 @@
 import React from "react";
 import { useAuth } from "../../Context/authcontext";
-import { ChatIcon, FriendsIcon, BellIcon } from "./icons";
+import { ChatIcon, FriendsIcon, BellIcon, ServerIcon } from "./icons";
 
 const NAV_ITEMS = [
   { key: "friends", label: "Friends", Icon: FriendsIcon },
   { key: "chats", label: "Chats", Icon: ChatIcon },
+  { key: "servers", label: "Servers", Icon: ServerIcon },
   { key: "notifications", label: "Notifications", Icon: BellIcon },
 ];
 

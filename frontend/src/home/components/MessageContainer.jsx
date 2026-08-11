@@ -4,8 +4,8 @@ import { toast } from "react-toastify";
 import { useChat } from "../../Context/SelectedUser";
 import { useAuth } from "../../Context/authcontext";
 import { useSocketContext } from "../../Context/SocketContext";
+import { useProfileModal } from "../../Context/ProfileModalContext";
 import TypingIndicator from "./TypingIndicator";
-import FriendProfileDialog from "./friendProfile";
 
 const PAGE_SIZE = 30;
 
@@ -20,7 +20,7 @@ export const Messages = () => {
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef(null); //to save in re renders
   const isTypingRef = useRef(false);
-  const [showFriendProfile, setShowFriendProfile] = useState(false);
+  const { openProfile } = useProfileModal();
 
   // Cursor pagination for message history - see docs/interview-notes for
   // the full design. hasMore/nextCursor come from the last page fetched;
@@ -83,7 +83,7 @@ export const Messages = () => {
   const parsedChatApp = (() => {
     try {
       return JSON.parse(localStorage.getItem("chatApp")) || null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();
@@ -291,7 +291,7 @@ export const Messages = () => {
       <div className="flex-1 h-screen flex flex-col text-white">
         {/* Header */}
         <button
-          onClick={() => setShowFriendProfile(true)}
+          onClick={() => openProfile(selectedUser._id)}
         >
           <div className="px-4 py-3 border-b border-white/10 flex items-center gap-3 bg-slate-900/40">
             <div className="w-9 h-9 rounded-full bg-yellow-400 flex items-center justify-center text-black font-semibold">
@@ -444,12 +444,6 @@ export const Messages = () => {
           </div>
         )}
       </div>
-      <FriendProfileDialog
-        open={showFriendProfile}
-        onClose={() => setShowFriendProfile(false)}
-        user={selectedUser}
-        me = {authUser}
-      />
     </>
   );
 };

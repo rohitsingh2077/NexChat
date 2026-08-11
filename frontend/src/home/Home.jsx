@@ -5,10 +5,14 @@ import { Sidebar } from "./components/Sidebar";
 import { Messages } from "./components/MessageContainer";
 import { FriendsList } from "./components/FriendsList";
 import { NotificationsPanel } from "./components/NotificationsPanel";
+import { ServerView } from "./components/ServerView";
 import { ProfileBar } from "./components/ProfieBar";
 import EditProfileDialog from "./components/UpdateProfile";
+import { UserProfileModal } from "./components/UserProfileModal";
 import { useAuth } from "../Context/authcontext";
 import { useSocketContext } from "../Context/SocketContext";
+import { useChat } from "../Context/SelectedUser";
+import { ProfileModalProvider } from "../Context/ProfileModalContext";
 
 export const Home = () => {
   const [activeView, setActiveView] = useState("chats");
@@ -17,6 +21,21 @@ export const Home = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { authUser } = useAuth();
   const { socket } = useSocketContext();
+  const { setSelectedUser } = useChat();
+
+  // Opened from the global profile modal's "Message" button - switches to
+  // the Chats tab with that user's DM open, same shape FriendsList already
+  // builds when starting a chat from the Friends tab.
+  const handleMessageFromProfile = (profileUser) => {
+    setSelectedUser({
+      _id: profileUser._id,
+      fullname: profileUser.fullname,
+      username: profileUser.username,
+      profilePicture: profileUser.profilePicture,
+      messagePrivacy: profileUser.messagePrivacy,
+    });
+    setActiveView("chats");
+  };
 
   // Owned here (not in NotificationsPanel) so NavRail's badge count stays
   // accurate even when the Notifications view isn't the active one.
@@ -47,6 +66,7 @@ export const Home = () => {
   }, [socket]);
 
   return (
+    <ProfileModalProvider>
     <div className="w-screen h-screen flex text-white">
       <NavRail
         activeView={activeView}
@@ -61,6 +81,7 @@ export const Home = () => {
           <Messages />
         </>
       )}
+      {activeView === "servers" && <ServerView />}
       {activeView === "friends" && (
         <FriendsList
           onOpenChat={() => setActiveView("chats")}
@@ -89,5 +110,7 @@ export const Home = () => {
         user={authUser}
       />
     </div>
+    <UserProfileModal onMessage={handleMessageFromProfile} />
+    </ProfileModalProvider>
   );
 };
