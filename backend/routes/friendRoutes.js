@@ -4,6 +4,16 @@ const {
   validateSendFriendRequest,
   validateObjectIdParam,
 } = require("../middleware/validate.js");
+const { rateLimit, byUser } = require("../middleware/rateLimit.js");
+
+// User-keyed - caps how fast one account can fire off friend requests
+// (spam-adding strangers).
+const sendRequestRateLimit = rateLimit({
+  name: "send-friend-request",
+  windowMs: 60 * 1000,
+  max: 20,
+  keyFn: byUser,
+});
 
 const {
   sendFriendRequest,
@@ -16,8 +26,8 @@ const {
   removeFriend,
 } = require("../controllers/friendController");
 
-// send request
-router.post("/requests", islogin, validateSendFriendRequest, sendFriendRequest);
+// send request (rate limit must run after islogin - it needs req.user)
+router.post("/requests", islogin, sendRequestRateLimit, validateSendFriendRequest, sendFriendRequest);
 
 // incoming / outgoing pending requests
 router.get("/requests/incoming", islogin, getFriendRequests);

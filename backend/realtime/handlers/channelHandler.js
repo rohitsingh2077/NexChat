@@ -2,18 +2,30 @@ const mongoose = require("mongoose");
 const Channel = require("../../modules/channels/channel.model");
 const serverService = require("../../modules/servers/server.service");
 const channelMessageService = require("../../modules/channelMessages/channelMessage.service");
+const { checkAndConsume } = require("../../middleware/rateLimit");
 
 const isValidId = (value) => mongoose.isValidObjectId(value);
 
+// Same flood-guard shape as the DM REST rate limit (see routes/messsageRoute.js)
+// - checkAndConsume is the transport-agnostic primitive, usable here since
+// there's no Express middleware chain for socket events.
+const SEND_MESSAGE_WINDOW_MS = 10 * 1000;
+const SEND_MESSAGE_MAX = 20;
+
 // Shared by join_channel and every mutation below: confirms the channel
-// exists and the caller is a member of its parent server. There's no
-// separate per-channel membership model - every server member can access
-// every text channel in that server (see docs/interview-notes/rbac.md).
+// exists, the caller is a member of its parent server, and (for members
+// approved with a restricted channel list - see serverMembership.model.js
+// allowedChannelIds) that this specific channel is one they're allowed into.
+// Most members are unrestricted; every server member can access every text
+// channel by default (see docs/interview-notes/rbac.md).
 const authorizeChannelAccess = async (channelId, userId) => {
   const channel = await Channel.findById(channelId).select("serverId");
   if (!channel) return { error: "CHANNEL_NOT_FOUND" };
   const membership = await serverService.getMembership(channel.serverId, userId);
   if (!membership) return { error: "NOT_A_SERVER_MEMBER" };
+  if (!serverService.canAccessChannel(membership, channelId)) {
+    return { error: "CHANNEL_ACCESS_RESTRICTED" };
+  }
   return { channel, membership };
 };
 
@@ -40,6 +52,9 @@ const registerChannelHandlers = (io, socket) => {
   socket.on("send_message", async ({ channelId, content, clientMessageId }, ack) => {
     try {
       if (!isValidId(channelId)) return ack?.({ success: false, error: "INVALID_CHANNEL_ID" });
+      if (!checkAndConsume(`send_message:${socket.userId}`, SEND_MESSAGE_WINDOW_MS, SEND_MESSAGE_MAX)) {
+        return ack?.({ success: false, error: "RATE_LIMITED" });
+      }
       const { error } = await authorizeChannelAccess(channelId, socket.userId);
       if (error) return ack?.({ success: false, error });
 
