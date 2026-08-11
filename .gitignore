@@ -2,4 +2,8 @@
 .env
 .env.local
 .env.*.local
+
+# Markdown is ignored by default (scratch notes, drafts) except the
+# interview-notes docs rule 27 requires keeping under version control.
 *.md
+!docs/**/*.md
