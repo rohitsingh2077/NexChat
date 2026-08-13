@@ -125,6 +125,28 @@ const validateUpdateMemberRole = (req, res, next) => {
   next();
 };
 
+const validateTransferOwnership = (req, res, next) => {
+  const { newOwnerUserId } = req.body || {};
+  if (!isNonEmptyString(newOwnerUserId) || !isValidObjectId(newOwnerUserId)) {
+    return next(new AppError(400, "newOwnerUserId must be a valid user id"));
+  }
+  next();
+};
+
+// Shape check only (not "does this code exist") - that's a DB lookup, done
+// in the service layer. This just rejects obviously-malformed input (wrong
+// length, disallowed characters) before it reaches a query. Matches
+// generateInviteCodeToken's output shape (crypto.randomBytes(6).toString
+// ("base64url")) with headroom either side in case that changes later.
+const INVITE_CODE_PATTERN = /^[A-Za-z0-9_-]{6,32}$/;
+
+const validateInviteCodeParam = (req, res, next) => {
+  if (!INVITE_CODE_PATTERN.test(req.params.code || "")) {
+    return next(new AppError(400, "invalid invite code format"));
+  }
+  next();
+};
+
 const MAX_CHANNEL_NAME = 100;
 
 const validateCreateChannel = (req, res, next) => {
@@ -147,4 +169,6 @@ module.exports = {
   validateCreateChannel,
   validateApproveJoinRequest,
   validateUpdateMemberRole,
+  validateTransferOwnership,
+  validateInviteCodeParam,
 };

@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const Server = require("./server.model");
 const ServerMembership = require("./serverMembership.model");
 const ServerJoinRequest = require("./serverJoinRequest.model");
@@ -14,6 +15,17 @@ const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const getMembership = (serverId, userId) =>
   ServerMembership.findOne({ serverId, userId });
+
+// A currently-valid inviteCode is a join secret - only owner/admin (who can
+// already regenerate/revoke it) should see it on a Server document. Shared
+// by every place a Server doc reaches a client (listMyServers below,
+// getServer's controller) so the redaction rule lives in one place instead
+// of being re-implemented per call site.
+const redactInviteCodeForRole = (server, role) => {
+  const plain = typeof server.toObject === "function" ? server.toObject() : { ...server };
+  if (!["owner", "admin"].includes(role)) delete plain.inviteCode;
+  return plain;
+};
 
 // null/unset allowedChannelIds = unrestricted. Used both when deciding
 // whether a member can open a given channel and when filtering the channel
@@ -48,7 +60,7 @@ const listMyServers = async (userId) => {
     // without cascading its memberships - not expected, but populate()
     // silently returns null rather than throwing, so this is cheap insurance.
     .filter((m) => m.serverId)
-    .map((m) => ({ server: m.serverId, role: m.role }));
+    .map((m) => ({ server: redactInviteCodeForRole(m.serverId, m.role), role: m.role }));
 };
 
 const getServerById = async (serverId) => {
@@ -81,40 +93,80 @@ const discoverServers = async (userId, search) => {
   );
 };
 
-// 'open' servers: joinServer creates membership immediately (original
-// behavior). 'approval_required' servers: creates a ServerJoinRequest
-// instead - see serverJoinRequest.model.js and approveJoinRequest below.
-const joinServer = async (serverId, userId) => {
-  const server = await Server.findById(serverId);
-  if (!server) throw new AppError(404, "SERVER_NOT_FOUND");
-
-  const existingMembership = await getMembership(serverId, userId);
+// Shared by joinServer (by id) and joinByInviteCode (by code) - once we have
+// a resolved Server doc, "what happens when this user tries to join it" is
+// identical regardless of how they found it. 'open' servers: create
+// membership immediately (original behavior). 'approval_required' servers:
+// create a ServerJoinRequest instead - see serverJoinRequest.model.js and
+// approveJoinRequest below.
+const joinServerDoc = async (server, userId) => {
+  const existingMembership = await getMembership(server._id, userId);
   if (existingMembership) {
     return { outcome: "already_member", membership: existingMembership };
   }
 
   if (server.joinPolicy !== "approval_required") {
     try {
-      const membership = await ServerMembership.create({ serverId, userId, role: "member" });
+      const membership = await ServerMembership.create({ serverId: server._id, userId, role: "member" });
       return { outcome: "joined", membership };
     } catch (error) {
       if (error.code !== 11000) throw error;
-      const existing = await ServerMembership.findOne({ serverId, userId });
+      const existing = await ServerMembership.findOne({ serverId: server._id, userId });
       if (!existing) throw error;
       return { outcome: "already_member", membership: existing };
     }
   }
 
   try {
-    const request = await ServerJoinRequest.create({ serverId, userId });
+    const request = await ServerJoinRequest.create({ serverId: server._id, userId });
     return { outcome: "pending", request };
   } catch (error) {
     if (error.code !== 11000) throw error;
-    const existing = await ServerJoinRequest.findOne({ serverId, userId });
+    const existing = await ServerJoinRequest.findOne({ serverId: server._id, userId });
     if (!existing) throw error;
     return { outcome: "pending", request: existing };
   }
 };
+
+const joinServer = async (serverId, userId) => {
+  const server = await Server.findById(serverId);
+  if (!server) throw new AppError(404, "SERVER_NOT_FOUND");
+  return joinServerDoc(server, userId);
+};
+
+// Possessing a valid code is sufficient to join without knowing serverId -
+// see server.model.js inviteCode. Same 404 either way (bad code vs. a code
+// that was since revoked/regenerated) so a guesser can't distinguish
+// "never existed" from "existed until a moment ago".
+const joinByInviteCode = async (code, userId) => {
+  const server = await Server.findOne({ inviteCode: code });
+  if (!server) throw new AppError(404, "INVALID_INVITE_CODE");
+  return joinServerDoc(server, userId);
+};
+
+// 6 random bytes (48 bits) base64url-encoded - short enough to paste into a
+// chat message, long enough that guessing isn't practical even without the
+// rate limit on the join-by-code route (which exists anyway as
+// defense-in-depth, see server.routes.js).
+const generateInviteCodeToken = () => crypto.randomBytes(6).toString("base64url");
+
+// Retried on collision purely because the unique index is what actually
+// guarantees uniqueness - the birthday-paradox odds of two servers ever
+// generating the same 48-bit token are negligible, so this loop almost
+// never runs more than once in practice.
+const regenerateInviteCode = async (serverId) => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const inviteCode = generateInviteCodeToken();
+    try {
+      await Server.updateOne({ _id: serverId }, { inviteCode });
+      return inviteCode;
+    } catch (error) {
+      if (error.code !== 11000 || attempt === 4) throw error;
+    }
+  }
+};
+
+const revokeInviteCode = (serverId) => Server.updateOne({ _id: serverId }, { inviteCode: null });
 
 const listJoinRequests = (serverId) =>
   ServerJoinRequest.find({ serverId }).populate("userId", PUBLIC_USER_FIELDS);
@@ -151,15 +203,55 @@ const rejectJoinRequest = async (serverId, requestId) => {
   return request;
 };
 
-// Ownership transfer isn't built yet, so an owner leaving would orphan the
-// server - rejected outright rather than silently allowed. Revisit once
-// ownership transfer exists.
+// An owner leaving directly would orphan the server, so it's rejected -
+// they must transferOwnership first. Deliberately not auto-transferring to
+// "whoever's been here longest" or similar - who becomes owner should be a
+// choice the current owner makes, not an implicit rule.
 const leaveServer = async (serverId, userId) => {
   const membership = await getMembership(serverId, userId);
   if (!membership) throw new AppError(404, "NOT_A_MEMBER");
   if (membership.role === "owner") throw new AppError(400, "OWNER_CANNOT_LEAVE");
   await membership.deleteOne();
   return membership;
+};
+
+// Race condition this guards against: two concurrent transfer calls from
+// the same owner (e.g. a duplicated/retried request) both reading "I'm
+// currently the owner" before either write lands, which would otherwise
+// promote two different targets and leave the server's real owner
+// ambiguous. findOneAndUpdate's filter (role: "owner") makes the demotion
+// an atomic compare-and-swap: only the request that finds the caller still
+// owner at the moment of the write succeeds; the loser's filter no longer
+// matches (the winner already flipped it to "admin") and gets NOT_THE_OWNER
+// instead of silently succeeding.
+const transferOwnership = async (serverId, currentOwnerId, newOwnerUserId) => {
+  if (String(currentOwnerId) === String(newOwnerUserId)) {
+    throw new AppError(400, "ALREADY_OWNER");
+  }
+
+  const demoted = await ServerMembership.findOneAndUpdate(
+    { serverId, userId: currentOwnerId, role: "owner" },
+    { role: "admin" }
+  );
+  if (!demoted) throw new AppError(403, "NOT_THE_OWNER");
+
+  const promoted = await ServerMembership.findOneAndUpdate(
+    { serverId, userId: newOwnerUserId },
+    { role: "owner" },
+    { new: true }
+  );
+  if (!promoted) {
+    // Target isn't a member of this server. No transaction wraps these two
+    // updates (same accepted trade-off as elsewhere in this app - see
+    // docs/interview-notes/message-delivery.md), but a server left with
+    // zero owners is worse than a failed transfer, so the demotion is
+    // undone synchronously here rather than left inconsistent.
+    await ServerMembership.updateOne({ _id: demoted._id }, { role: "owner" });
+    throw new AppError(404, "TARGET_NOT_A_MEMBER");
+  }
+
+  await Server.updateOne({ _id: serverId }, { ownerId: newOwnerUserId });
+  return promoted;
 };
 
 // Owner/admin removing someone else - distinct from leaveServer (self-service).
@@ -198,15 +290,20 @@ const listMembers = async (serverId) => {
 module.exports = {
   getMembership,
   canAccessChannel,
+  redactInviteCodeForRole,
   createServer,
   listMyServers,
   getServerById,
   discoverServers,
   joinServer,
+  joinByInviteCode,
+  regenerateInviteCode,
+  revokeInviteCode,
   listJoinRequests,
   approveJoinRequest,
   rejectJoinRequest,
   leaveServer,
+  transferOwnership,
   kickMember,
   updateMemberRole,
   listMembers,

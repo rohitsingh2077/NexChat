@@ -36,7 +36,45 @@ const discoverServers = async (req, res, next) => {
 const getServer = async (req, res, next) => {
   try {
     const server = await serverService.getServerById(req.params.serverId);
-    return res.status(200).json({ success: true, server, role: req.membership.role });
+    const payload = serverService.redactInviteCodeForRole(server, req.membership.role);
+    return res.status(200).json({ success: true, server: payload, role: req.membership.role });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const regenerateInviteCode = async (req, res, next) => {
+  try {
+    const inviteCode = await serverService.regenerateInviteCode(req.params.serverId);
+    return res.status(200).json({ success: true, inviteCode });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const revokeInviteCode = async (req, res, next) => {
+  try {
+    await serverService.revokeInviteCode(req.params.serverId);
+    return res.status(200).json({ success: true, message: "Invite code revoked" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const joinByInviteCode = async (req, res, next) => {
+  try {
+    const { outcome, membership, request } = await serverService.joinByInviteCode(
+      req.params.code,
+      req.user._id
+    );
+    const statusCode = outcome === "already_member" ? 200 : 201;
+    return res.status(statusCode).json({
+      success: true,
+      outcome,
+      serverId: membership?.serverId || request?.serverId,
+      role: membership?.role,
+      requestId: request?._id,
+    });
   } catch (error) {
     next(error);
   }
@@ -103,6 +141,19 @@ const leaveServer = async (req, res, next) => {
   }
 };
 
+const transferOwnership = async (req, res, next) => {
+  try {
+    const membership = await serverService.transferOwnership(
+      req.params.serverId,
+      req.user._id,
+      req.body.newOwnerUserId
+    );
+    return res.status(200).json({ success: true, newOwnerUserId: membership.userId });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const kickMember = async (req, res, next) => {
   try {
     await serverService.kickMember(req.params.serverId, req.params.userId);
@@ -139,11 +190,15 @@ module.exports = {
   listMyServers,
   discoverServers,
   getServer,
+  regenerateInviteCode,
+  revokeInviteCode,
   joinServer,
+  joinByInviteCode,
   listJoinRequests,
   approveJoinRequest,
   rejectJoinRequest,
   leaveServer,
+  transferOwnership,
   kickMember,
   updateMemberRole,
   listMembers,
