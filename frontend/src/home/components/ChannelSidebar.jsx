@@ -11,6 +11,7 @@ export const ChannelSidebar = ({
   onCreateChannelClick,
   onLeaveServer,
   onOpenJoinRequests,
+  onOpenInvite,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const canManageChannels = role === "owner" || role === "admin";
@@ -37,6 +38,17 @@ export const ChannelSidebar = ({
         </button>
         {menuOpen && (
           <div className="absolute top-full left-2 right-2 mt-1 bg-slate-800 border border-white/10 rounded-lg shadow-xl z-10 overflow-hidden">
+            {canManageChannels && (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenInvite();
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5"
+              >
+                Invite People
+              </button>
+            )}
             {canReviewRequests && (
               <button
                 onClick={() => {

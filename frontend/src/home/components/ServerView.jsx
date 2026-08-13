@@ -10,6 +10,7 @@ import { ServerPreviewPanel } from "./ServerPreviewPanel";
 import CreateServerModal from "./CreateServerModal";
 import CreateChannelModal from "./CreateChannelModal";
 import JoinRequestsModal from "./JoinRequestsModal";
+import InviteModal from "./InviteModal";
 
 export const ServerView = () => {
   const { socket, onlineUser } = useSocketContext();
@@ -21,6 +22,7 @@ export const ServerView = () => {
   const [showCreateServer, setShowCreateServer] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showJoinRequests, setShowJoinRequests] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   // A server found via search that the user isn't a member of yet - shown
   // via ServerPreviewPanel instead of the normal channel view.
@@ -137,6 +139,36 @@ export const ServerView = () => {
     );
   };
 
+  // After a transfer, the caller (previously "owner") is now "admin" and the
+  // target is "owner" - refetch both the server list (role badges) and
+  // members (role labels) instead of hand-rolling the two-sided role swap
+  // in local state, since it's easy to get one side wrong.
+  const handleTransferOwnership = async (newOwnerUserId) => {
+    await axios.post(`/api/servers/${selectedServerId}/transfer-ownership`, { newOwnerUserId });
+    await Promise.all([
+      fetchServers(),
+      axios.get(`/api/servers/${selectedServerId}/members`).then((res) => {
+        if (res.data?.success) setMembers(res.data.members || []);
+      }),
+    ]);
+  };
+
+  const handleInviteCodeChange = (inviteCode) => {
+    setServers((prev) =>
+      prev.map((entry) =>
+        entry.server._id === selectedServerId
+          ? { ...entry, server: { ...entry.server, inviteCode } }
+          : entry
+      )
+    );
+  };
+
+  const handleJoinedByCode = async (serverId) => {
+    await fetchServers();
+    setPreviewResult(null);
+    setSelectedServerId(serverId);
+  };
+
   const handleJoinPreview = async () => {
     if (!previewResult) return;
     try {
@@ -173,6 +205,7 @@ export const ServerView = () => {
         onSelect={handleSelectServer}
         onCreateClick={() => setShowCreateServer(true)}
         onPreview={handlePreview}
+        onJoinedByCode={handleJoinedByCode}
       />
 
       {previewResult ? (
@@ -193,6 +226,7 @@ export const ServerView = () => {
             onCreateChannelClick={() => setShowCreateChannel(true)}
             onLeaveServer={handleLeaveServer}
             onOpenJoinRequests={() => setShowJoinRequests(true)}
+            onOpenInvite={() => setShowInvite(true)}
           />
 
           {selectedChannel ? (
@@ -211,6 +245,7 @@ export const ServerView = () => {
                   myRole={myRole}
                   onKick={handleKickMember}
                   onChangeRole={handleChangeMemberRole}
+                  onTransferOwnership={handleTransferOwnership}
                 />
               )}
             </>
@@ -246,6 +281,13 @@ export const ServerView = () => {
         onClose={() => setShowJoinRequests(false)}
         serverId={selectedServerId}
         channels={channels}
+      />
+      <InviteModal
+        open={showInvite}
+        onClose={() => setShowInvite(false)}
+        serverId={selectedServerId}
+        inviteCode={selectedServer?.inviteCode}
+        onInviteCodeChange={handleInviteCodeChange}
       />
     </>
   );

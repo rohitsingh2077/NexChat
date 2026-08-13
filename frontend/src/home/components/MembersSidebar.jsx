@@ -7,7 +7,7 @@ import { ResizeHandle, useResizableWidth } from "./ResizeHandle";
 // Only Online/Offline - presence is binary server-side (see
 // backend/realtime/handlers/presenceHandler.js). Idle/Do Not Disturb aren't
 // real states in this app, so they're not fabricated here.
-export const MembersSidebar = ({ members, onlineUserIds, myRole, onKick, onChangeRole }) => {
+export const MembersSidebar = ({ members, onlineUserIds, myRole, onKick, onChangeRole, onTransferOwnership }) => {
   const [openMenuId, setOpenMenuId] = useState(null);
   const { openProfile } = useProfileModal();
   const canManageMembers = myRole === "owner" || myRole === "admin";
@@ -48,11 +48,31 @@ export const MembersSidebar = ({ members, onlineUserIds, myRole, onKick, onChang
     }
   };
 
+  const handleTransferOwnership = async (member) => {
+    setOpenMenuId(null);
+    const name = member.user.fullname || member.user.username;
+    if (
+      !window.confirm(
+        `Make ${name} the owner of this server? You'll be demoted to admin - this can't be undone by yourself.`
+      )
+    )
+      return;
+    try {
+      await onTransferOwnership(member.user._id);
+      toast.success(`${name} is now the owner`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to transfer ownership");
+    }
+  };
+
   const renderMember = (m) => {
     const canKickThis = canManageMembers && m.role !== "owner";
     const canPromote = canChangeRoles && m.role === "member";
     const canDemote = canChangeRoles && m.role === "admin";
-    const hasMenu = canKickThis || canPromote || canDemote;
+    // Owner-only, same as promote/demote - see server.service.js
+    // transferOwnership for why this isn't opened up to admins.
+    const canTransfer = canChangeRoles && m.role !== "owner";
+    const hasMenu = canKickThis || canPromote || canDemote || canTransfer;
 
     return (
       <div
@@ -110,6 +130,14 @@ export const MembersSidebar = ({ members, onlineUserIds, myRole, onKick, onChang
                     className="w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5"
                   >
                     Remove Admin
+                  </button>
+                )}
+                {canTransfer && (
+                  <button
+                    onClick={() => handleTransferOwnership(m)}
+                    className="w-full text-left px-3 py-2 text-sm text-yellow-300 hover:bg-white/5"
+                  >
+                    Make Owner
                   </button>
                 )}
                 {canKickThis && (

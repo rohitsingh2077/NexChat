@@ -136,6 +136,47 @@ single point of control. `ADJUSTABLE_ROLES = ['member', 'admin']` in `server.ser
 blocks granting/revoking `'owner'` through this endpoint at all - ownership only ever originates
 in `createServer`, never reassigned via a role-update call (see "no ownership transfer" below).
 
+## Update: invite codes and ownership transfer (closes two gaps above)
+
+### Invite codes
+
+`Server.inviteCode` (nullable, unique-sparse-indexed) is a short random token
+(`crypto.randomBytes(6).toString('base64url')`, 48 bits) an owner/admin generates explicitly -
+servers start without one. `POST /api/servers/join/code/:code` resolves it to a `Server` and
+runs it through the exact same `joinServerDoc` core the id-based `joinServer` uses (extracted
+specifically so both entry points share one join-outcome implementation) - `approval_required`
+servers still produce a pending `ServerJoinRequest`, not an instant membership, regardless of
+which path was used to find the server. A bogus code and a revoked code both 404 identically
+(`INVALID_INVITE_CODE`), so a guesser can't tell "never existed" from "existed a moment ago" -
+same information-hiding principle as `isServerMember`'s 403-not-404. The route is additionally
+rate-limited (user-keyed, 20/10min) as defense-in-depth, even though 48 bits of randomness
+already makes brute-forcing impractical.
+
+`inviteCode` is redacted from every Server document a non-owner/admin client receives
+(`redactInviteCodeForRole`, shared by `getServer` and `listMyServers` so the rule lives in one
+place) - a plain member shouldn't see a currently-valid join secret just because they're already
+in the server.
+
+### Ownership transfer
+
+`transferOwnership(serverId, currentOwnerId, newOwnerUserId)` is a two-step role swap, not a new
+concept - it reuses `ServerMembership.role` exactly as everything else in this doc does. The
+concurrency-sensitive part: two concurrent transfer calls from the same owner (a duplicated or
+retried request) must not both succeed and promote two different targets. The demotion step uses
+`findOneAndUpdate({serverId, userId: currentOwnerId, role: "owner"}, {role: "admin"})` - an
+atomic compare-and-swap keyed on the caller's role being `"owner"` *at the moment the write
+executes*, not merely when `requireRole(["owner"])` checked a few queries earlier. Only one
+concurrent call can find that filter still matching; the loser gets `403 NOT_THE_OWNER`. If the
+promotion step then fails (target isn't a member), the demotion is rolled back synchronously
+before the error surfaces - no transaction wraps the two updates (same accepted trade-off as the
+rest of this app, see `message-delivery.md`), but a server left with zero owners is worse than a
+failed transfer, so this one rollback isn't optional the way most of this app's "eventually
+consistent, no transaction" choices are.
+
+`leaveServer` still rejects an owner leaving directly (`OWNER_CANNOT_LEAVE`) - transfer first,
+then leave, are two deliberate separate actions rather than one "leave and auto-pick a
+successor" operation, so who becomes owner is always a choice the current owner makes.
+
 ## What we deliberately did not do
 
 - **No per-channel permission overwrites.** Roles are server-wide (an admin is an
@@ -145,11 +186,14 @@ in `createServer`, never reassigned via a role-update call (see "no ownership tr
   (`allowedChannelIds` on `ServerMembership`, added alongside approval-gated joining, is a
   narrower mechanism than this - it restricts *which channels an approved member can see at
   all*, set once at approval time, not a per-channel role/permission matrix.)
-- **No invite codes.** `joinPolicy: 'approval_required'` gates joining behind owner/admin
-  approval, but there is still no shareable invite-code/link mechanism - a user still needs the
-  `serverId` itself to request to join. Invite codes remain a clearly separable later addition.
-- **No ownership transfer.** An owner is permanent for now; leaving is blocked
-  rather than handled.
+- **No expiring or multi-use-capped invite codes.** One active code per server, valid until
+  explicitly revoked or regenerated - no "expires in 24h" or "max 10 uses" options like
+  Discord's invite settings. A deliberate scope cut for the first version, not an oversight.
+- **No invite-code audit trail.** Nothing records who joined via which code or when a code was
+  revoked/regenerated - `Server.inviteCode` only ever holds the *current* value.
+- **No ownership transfer to a non-member.** The target must already be a member (promoted from
+  whatever role they had); there's no "transfer to someone outside the server," which would
+  effectively also need to invite them in the same step.
 
 ## Common interview questions
 

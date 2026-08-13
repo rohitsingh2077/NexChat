@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { toast } from "react-toastify";
 import { SearchIcon, PlusIcon } from "./icons";
 import { ResizeHandle, useResizableWidth } from "./ResizeHandle";
 
-export const ServerList = ({ servers, selectedServerId, onSelect, onCreateClick, onPreview }) => {
+export const ServerList = ({ servers, selectedServerId, onSelect, onCreateClick, onPreview, onJoinedByCode }) => {
   const [search, setSearch] = useState("");
   const [discoverResults, setDiscoverResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef(null);
+  const [showJoinByCode, setShowJoinByCode] = useState(false);
+  const [inviteCodeInput, setInviteCodeInput] = useState("");
+  const [joiningByCode, setJoiningByCode] = useState(false);
   const { width, startDrag } = useResizableWidth({
     storageKey: "nexchat:serverListWidth",
     defaultWidth: 280,
@@ -59,6 +63,28 @@ export const ServerList = ({ servers, selectedServerId, onSelect, onCreateClick,
     }
   };
 
+  const handleJoinByCode = async () => {
+    const code = inviteCodeInput.trim();
+    if (!code) return;
+    try {
+      setJoiningByCode(true);
+      const res = await axios.post(`/api/servers/join/code/${code}`);
+      if (!res.data?.success) return;
+      if (res.data.outcome === "pending") {
+        toast.success("Join request sent - waiting for approval");
+      } else {
+        toast.success("Joined server");
+        onJoinedByCode(res.data.serverId);
+      }
+      setInviteCodeInput("");
+      setShowJoinByCode(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Invalid or expired invite code");
+    } finally {
+      setJoiningByCode(false);
+    }
+  };
+
   return (
     <div className="h-screen flex shrink-0">
       <div
@@ -91,6 +117,34 @@ export const ServerList = ({ servers, selectedServerId, onSelect, onCreateClick,
           </span>
         </div>
         {searching && <p className="text-xs text-white/50 mt-2">Searching...</p>}
+
+        {showJoinByCode ? (
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              value={inviteCodeInput}
+              onChange={(e) => setInviteCodeInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleJoinByCode()}
+              type="text"
+              placeholder="Enter invite code"
+              autoFocus
+              className="flex-1 p-2 rounded-lg bg-white/10 text-white placeholder-white/50 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-400 border border-white/10"
+            />
+            <button
+              onClick={handleJoinByCode}
+              disabled={joiningByCode || !inviteCodeInput.trim()}
+              className="px-2.5 py-2 rounded-lg text-xs font-semibold bg-blue-500 hover:bg-blue-600 disabled:opacity-50 shrink-0"
+            >
+              Join
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowJoinByCode(true)}
+            className="text-[11px] text-white/40 hover:text-white/70 mt-2"
+          >
+            Have an invite code?
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-4">
