@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const Channel = require("../../modules/channels/channel.model");
 const serverService = require("../../modules/servers/server.service");
 const channelMessageService = require("../../modules/channelMessages/channelMessage.service");
 const { checkAndConsume } = require("../../middleware/rateLimit");
@@ -12,27 +11,16 @@ const isValidId = (value) => mongoose.isValidObjectId(value);
 const SEND_MESSAGE_WINDOW_MS = 10 * 1000;
 const SEND_MESSAGE_MAX = 20;
 
-// Shared by join_channel and every mutation below: confirms the channel
-// exists, the caller is a member of its parent server, and (for members
-// approved with a restricted channel list - see serverMembership.model.js
-// allowedChannelIds) that this specific channel is one they're allowed into.
-// Most members are unrestricted; every server member can access every text
-// channel by default (see docs/interview-notes/rbac.md).
-const authorizeChannelAccess = async (channelId, userId) => {
-  const channel = await Channel.findById(channelId).select("serverId");
-  if (!channel) return { error: "CHANNEL_NOT_FOUND" };
-  const membership = await serverService.getMembership(channel.serverId, userId);
-  if (!membership) return { error: "NOT_A_SERVER_MEMBER" };
-  if (!serverService.canAccessChannel(membership, channelId)) {
-    return { error: "CHANNEL_ACCESS_RESTRICTED" };
-  }
-  return { channel, membership };
-};
-
+// authorizeChannelAccess (channel exists, caller is a server member, and -
+// for members restricted to specific channels, see serverMembership.model.js
+// allowedChannelIds - this channel is one they're allowed into) now lives in
+// server.service.js, shared with the document handler. Most members are
+// unrestricted; every server member can access every text channel by
+// default (see docs/interview-notes/rbac.md).
 const registerChannelHandlers = (io, socket) => {
   socket.on("join_channel", async ({ channelId }, ack) => {
     if (!isValidId(channelId)) return ack?.({ success: false, error: "INVALID_CHANNEL_ID" });
-    const { error } = await authorizeChannelAccess(channelId, socket.userId);
+    const { error } = await serverService.authorizeChannelAccess(channelId, socket.userId);
     if (error) return ack?.({ success: false, error });
     socket.join(`channel:${channelId}`);
     ack?.({ success: true });
@@ -55,7 +43,7 @@ const registerChannelHandlers = (io, socket) => {
       if (!checkAndConsume(`send_message:${socket.userId}`, SEND_MESSAGE_WINDOW_MS, SEND_MESSAGE_MAX)) {
         return ack?.({ success: false, error: "RATE_LIMITED" });
       }
-      const { error } = await authorizeChannelAccess(channelId, socket.userId);
+      const { error } = await serverService.authorizeChannelAccess(channelId, socket.userId);
       if (error) return ack?.({ success: false, error });
 
       const { message, isNewMessage } = await channelMessageService.sendMessage({
@@ -82,7 +70,7 @@ const registerChannelHandlers = (io, socket) => {
       if (!isValidId(channelId) || !isValidId(messageId)) {
         return ack?.({ success: false, error: "INVALID_ID" });
       }
-      const { error } = await authorizeChannelAccess(channelId, socket.userId);
+      const { error } = await serverService.authorizeChannelAccess(channelId, socket.userId);
       if (error) return ack?.({ success: false, error });
 
       const message = await channelMessageService.editMessage({
@@ -103,7 +91,7 @@ const registerChannelHandlers = (io, socket) => {
       if (!isValidId(channelId) || !isValidId(messageId)) {
         return ack?.({ success: false, error: "INVALID_ID" });
       }
-      const { error, membership } = await authorizeChannelAccess(channelId, socket.userId);
+      const { error, membership } = await serverService.authorizeChannelAccess(channelId, socket.userId);
       if (error) return ack?.({ success: false, error });
 
       await channelMessageService.deleteMessage({

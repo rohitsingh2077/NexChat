@@ -8,6 +8,7 @@ const registerTypingHandlers = require("./handlers/typingHandler");
 const registerDmHandlers = require("./handlers/dmHandler");
 const registerServerRoomHandlers = require("./handlers/serverRoomHandler");
 const registerChannelHandlers = require("./handlers/channelHandler");
+const registerDocumentHandlers = require("./handlers/documentHandler");
 
 const app = express();
 const server = http.createServer(app);
@@ -73,6 +74,7 @@ io.on("connection", (socket) => {
   registerDmHandlers(io, socket, userSocketMap);
   registerServerRoomHandlers(io, socket);
   registerChannelHandlers(io, socket);
+  registerDocumentHandlers(io, socket);
 });
 
 module.exports = { io, app, server, getRecieverSocket };

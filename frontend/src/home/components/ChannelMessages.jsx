@@ -5,21 +5,10 @@ import { useAuth } from "../../Context/authcontext";
 import { useSocketContext } from "../../Context/SocketContext";
 import { useProfileModal } from "../../Context/ProfileModalContext";
 import { HashIcon, UsersIcon, SendIcon, EditIcon, TrashIcon } from "./icons";
+import { emitAck } from "../../utils/emitAck";
 
 const PAGE_SIZE = 30;
 const TYPING_EXPIRY_MS = 3000;
-
-// Wraps a socket emit-with-ack in a Promise, with a client-side timeout so a
-// dropped connection doesn't leave the UI hanging forever waiting for an ack
-// that will never arrive.
-const emitAck = (socket, event, payload, timeoutMs = 8000) =>
-  new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Request timed out")), timeoutMs);
-    socket.emit(event, payload, (ack) => {
-      clearTimeout(timer);
-      resolve(ack);
-    });
-  });
 
 export const ChannelMessages = ({ server, channel, role, members, onToggleMembers }) => {
   const { socket } = useSocketContext();
@@ -256,7 +245,7 @@ export const ChannelMessages = ({ server, channel, role, members, onToggleMember
     .filter(Boolean);
 
   return (
-    <div className="flex-1 h-screen flex flex-col text-white min-w-0">
+    <div className="h-full flex flex-col text-white min-w-0">
       <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-slate-900/40">
         <div className="flex items-center gap-2 min-w-0">
           <HashIcon size={18} />

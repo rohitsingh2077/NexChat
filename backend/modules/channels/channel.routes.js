@@ -11,6 +11,7 @@ const {
 const { requireRole, requireChannelAccess } = require("../servers/server.middleware");
 const { createChannel, listChannels, deleteChannel } = require("./channel.controller");
 const { getChannelMessages } = require("../channelMessages/channelMessage.controller");
+const documentRouter = require("../documents/document.routes");
 
 // isServerMember already ran in server.routes.js before this router is
 // reached, so req.membership is available in every handler below.
@@ -34,5 +35,12 @@ router.get(
   validateGetMessages,
   getChannelMessages
 );
+
+// Collaborative documents scoped to this channel. Metadata (create/list/get/
+// rename/delete) is REST, same split as channel messages - the actual live
+// editing happens over the document:* socket events (see
+// realtime/handlers/documentHandler.js), not here. requireChannelAccess runs
+// inside documentRouter itself since every route in it needs it.
+router.use("/:channelId/documents", validateObjectIdParam("channelId"), documentRouter);
 
 module.exports = router;

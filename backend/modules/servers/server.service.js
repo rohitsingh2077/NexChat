@@ -35,6 +35,24 @@ const canAccessChannel = (membership, channelId) => {
   return membership.allowedChannelIds.some((id) => String(id) === String(channelId));
 };
 
+// Shared by every channel-scoped socket handler (channel messages,
+// documents): confirms the channel exists, the caller is a member of its
+// parent server, and (for members restricted to allowedChannelIds) that this
+// specific channel is one they're allowed into. Originally lived only inside
+// channelHandler.js; pulled up here once the document feature needed the
+// identical check, so both handlers share one implementation instead of two
+// copies drifting apart. See docs/interview-notes/rbac.md.
+const authorizeChannelAccess = async (channelId, userId) => {
+  const channel = await Channel.findById(channelId).select("serverId");
+  if (!channel) return { error: "CHANNEL_NOT_FOUND" };
+  const membership = await getMembership(channel.serverId, userId);
+  if (!membership) return { error: "NOT_A_SERVER_MEMBER" };
+  if (!canAccessChannel(membership, channelId)) {
+    return { error: "CHANNEL_ACCESS_RESTRICTED" };
+  }
+  return { channel, membership };
+};
+
 const createServer = async (ownerId, { name, description, icon, joinPolicy }) => {
   const server = await Server.create({
     name,
@@ -290,6 +308,7 @@ const listMembers = async (serverId) => {
 module.exports = {
   getMembership,
   canAccessChannel,
+  authorizeChannelAccess,
   redactInviteCodeForRole,
   createServer,
   listMyServers,

@@ -5,6 +5,7 @@ import { useSocketContext } from "../../Context/SocketContext";
 import { ServerList } from "./ServerList";
 import { ChannelSidebar } from "./ChannelSidebar";
 import { ChannelMessages } from "./ChannelMessages";
+import { DocumentsPanel } from "./DocumentsPanel";
 import { MembersSidebar } from "./MembersSidebar";
 import { ServerPreviewPanel } from "./ServerPreviewPanel";
 import CreateServerModal from "./CreateServerModal";
@@ -18,6 +19,7 @@ export const ServerView = () => {
   const [selectedServerId, setSelectedServerId] = useState(null);
   const [channels, setChannels] = useState([]);
   const [selectedChannelId, setSelectedChannelId] = useState(null);
+  const [channelView, setChannelView] = useState("chat"); // 'chat' | 'docs'
   const [members, setMembers] = useState([]);
   const [showCreateServer, setShowCreateServer] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -84,6 +86,13 @@ export const ServerView = () => {
     };
     fetchChannelsAndMembers();
   }, [selectedServerId]);
+
+  // Land back on Chat whenever the selected channel changes, rather than
+  // leaving a previously-open Docs tab showing for a channel that wasn't
+  // the one it was opened for.
+  useEffect(() => {
+    setChannelView("chat");
+  }, [selectedChannelId]);
 
   const selectedEntry = servers.find((s) => s.server._id === selectedServerId);
   const selectedServer = selectedEntry?.server;
@@ -231,14 +240,49 @@ export const ServerView = () => {
 
           {selectedChannel ? (
             <>
-              <ChannelMessages
-                server={selectedServer}
-                channel={selectedChannel}
-                role={myRole}
-                members={members}
-                onToggleMembers={() => setShowMembers((v) => !v)}
-              />
-              {showMembers && (
+              <div className="h-screen flex flex-col flex-1 min-w-0">
+                <div className="px-4 pt-2 flex items-center gap-1 border-b border-white/10 bg-slate-900/40 shrink-0">
+                  <button
+                    onClick={() => setChannelView("chat")}
+                    className={`px-3 py-1.5 text-sm rounded-t-lg transition ${
+                      channelView === "chat"
+                        ? "bg-white/10 text-white"
+                        : "text-white/50 hover:text-white/80"
+                    }`}
+                  >
+                    Chat
+                  </button>
+                  <button
+                    onClick={() => setChannelView("docs")}
+                    className={`px-3 py-1.5 text-sm rounded-t-lg transition ${
+                      channelView === "docs"
+                        ? "bg-white/10 text-white"
+                        : "text-white/50 hover:text-white/80"
+                    }`}
+                  >
+                    Docs
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0">
+                  {channelView === "chat" ? (
+                    <ChannelMessages
+                      server={selectedServer}
+                      channel={selectedChannel}
+                      role={myRole}
+                      members={members}
+                      onToggleMembers={() => setShowMembers((v) => !v)}
+                    />
+                  ) : (
+                    <DocumentsPanel
+                      server={selectedServer}
+                      channel={selectedChannel}
+                      role={myRole}
+                      members={members}
+                    />
+                  )}
+                </div>
+              </div>
+              {showMembers && channelView === "chat" && (
                 <MembersSidebar
                   members={members}
                   onlineUserIds={onlineUser}

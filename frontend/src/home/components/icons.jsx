@@ -107,3 +107,18 @@ export const SendIcon = ({ size = 18 }) => (
     <polygon points="22 2 15 22 11 13 2 9 22 2" />
   </svg>
 );
+
+export const HistoryIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 3v5h5" />
+    <path d="M3.05 13a9 9 0 1 0 2.12-9.36L3 8" />
+    <path d="M12 7v5l4 2" />
+  </svg>
+);
+
+export const CloseIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);

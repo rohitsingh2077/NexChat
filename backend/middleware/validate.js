@@ -157,6 +157,33 @@ const validateCreateChannel = (req, res, next) => {
   next();
 };
 
+const MAX_DOCUMENT_TITLE = 150;
+
+// Shared by document create (POST) and rename (PATCH) - both take a
+// title-only body. Document content itself is never validated here - it's
+// socket-only (document:edit) and validated in document.service.js, the
+// same split as channel messages (REST for metadata/history, sockets for
+// the actual content-mutating events).
+const validateDocumentTitle = (req, res, next) => {
+  const { title } = req.body || {};
+  if (!isNonEmptyString(title) || title.length > MAX_DOCUMENT_TITLE) {
+    return next(new AppError(400, `title is required (max ${MAX_DOCUMENT_TITLE} chars)`));
+  }
+  next();
+};
+
+const MAX_VERSION_LABEL = 150;
+
+// label is optional (auto-snapshots never have one, and a manual "Save
+// version" doesn't require naming it) - only validated when present.
+const validateVersionLabel = (req, res, next) => {
+  const { label } = req.body || {};
+  if (label !== undefined && (typeof label !== "string" || label.length > MAX_VERSION_LABEL)) {
+    return next(new AppError(400, `label must be a string up to ${MAX_VERSION_LABEL} chars`));
+  }
+  next();
+};
+
 module.exports = {
   validateRegister,
   validateLogin,
@@ -167,8 +194,10 @@ module.exports = {
   validateGetMessages,
   validateCreateServer,
   validateCreateChannel,
+  validateDocumentTitle,
   validateApproveJoinRequest,
   validateUpdateMemberRole,
   validateTransferOwnership,
   validateInviteCodeParam,
+  validateVersionLabel,
 };
